@@ -236,6 +236,12 @@ function getKnownTerms() {
   };
 }
 
+// Bookmakers aren't a fixed list — everyone uses a different set, so this just grows from
+// whatever the user has actually typed in before. Starts empty for a brand-new user/browser.
+function getKnownBookmakers() {
+  return [...new Set(bets.map(b => b.bookmaker).filter(Boolean))];
+}
+
 // Only surfaces a selection/market as an autocomplete suggestion once it's been used more
 // than `minCount` times across saved bets — keeps one-off/typo'd entries out of the list.
 function getFrequentTerms(field, minCount) {
@@ -439,10 +445,9 @@ function parseSlipText(text) {
 }
 
 function applyParsedSlip(parsed) {
-  const bmSelect = document.getElementById('f-bookmaker');
-  if (parsed.bookmaker && !bmSelect.value) {
-    const match = [...bmSelect.options].find(o => o.value.toLowerCase().startsWith(parsed.bookmaker.toLowerCase()));
-    if (match) bmSelect.value = match.value;
+  const bmField = document.getElementById('f-bookmaker');
+  if (parsed.bookmaker && !bmField.value) {
+    bmField.value = parsed.bookmaker;
   }
 
   if (parsed.betType === 'each-way') {
@@ -564,8 +569,23 @@ function getFilteredSortedBets() {
 // ---------- Rendering ----------
 
 function render() {
+  renderBookmakerFilterOptions();
   renderStats();
   renderBetsList();
+}
+
+// Bookmaker filter isn't a fixed list either — rebuilt from whatever bookmakers actually
+// appear in saved bets, so it starts empty for a new user and grows as they add bets.
+function renderBookmakerFilterOptions() {
+  const select = document.getElementById('filter-bookmaker');
+  const current = select.value;
+  const bookmakers = getKnownBookmakers().sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  select.innerHTML = `<option value="">All bookmakers</option>` +
+    bookmakers.map(bm => `<option value="${escapeHtml(bm)}">${escapeHtml(bm)}</option>`).join('');
+  // Always assign (even back to '') rather than only when `current` is still valid — this goes
+  // through attachSelectDropdown's intercepted setter, keeping its proxy text in sync with
+  // whatever the rebuilt option list actually resolved the value to.
+  select.value = bookmakers.includes(current) ? current : '';
 }
 
 function renderStats() {
@@ -598,17 +618,20 @@ function renderStats() {
     { label: 'Won', value: won, status: 'won' },
     { label: 'Lost', value: lost, status: 'lost' },
     { label: 'Cash out', value: cashedOut, status: 'cash-out' },
-    { label: 'Total stakes', value: money(staked) },
-    { label: 'Open stakes', value: money(openStaked) },
-    { label: 'Settled return', value: money(returned) },
-    { label: 'Profit / loss', value: money(pl), cls: pl > 0 ? 'pos' : (pl < 0 ? 'neg' : '') },
+    { label: 'Total stakes', value: money(staked), detail: 'totalStaked' },
+    { label: 'Open stakes', value: money(openStaked), detail: 'openStaked' },
+    { label: 'Settled return', value: money(returned), detail: 'settledReturn' },
+    { label: 'Profit / Loss', value: money(pl), cls: pl > 0 ? 'pos' : (pl < 0 ? 'neg' : ''), detail: 'pl' },
   ];
 
   document.getElementById('stats-bar').innerHTML = stats.map(s => {
     const clickable = s.status !== undefined;
     const active = clickable && currentStatus === s.status;
+    const hasDetail = s.detail !== undefined;
     return `
-    <div class="stat-card ${clickable ? 'stat-card-clickable' : ''} ${active ? 'active' : ''}" ${clickable ? `data-status="${s.status}" role="button" tabindex="0"` : ''}>
+    <div class="stat-card ${clickable ? 'stat-card-clickable' : ''} ${hasDetail ? 'stat-card-clickable' : ''} ${active ? 'active' : ''}"
+      ${clickable ? `data-status="${s.status}"` : ''} ${hasDetail ? `data-detail="${s.detail}"` : ''}
+      ${clickable || hasDetail ? `role="button" tabindex="0"` : ''}>
       <div class="stat-label">${s.label}</div>
       <div class="stat-value ${s.cls || ''}">${s.value}</div>
     </div>
@@ -617,6 +640,10 @@ function renderStats() {
 
   document.querySelectorAll('.stat-card-clickable').forEach(card => {
     const activate = () => {
+      if (card.dataset.detail) {
+        openStatDetailModal(card.dataset.detail);
+        return;
+      }
       document.getElementById('filter-status').value = card.dataset.status;
       currentPage = 1;
       render();
@@ -626,6 +653,236 @@ function renderStats() {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
     });
   });
+}
+
+// Stat cards that open a breakdown view — keyed by the `detail` value set on their stat object
+// in renderStats(). Only "Total stakes" is wired up for now; more can be added the same way.
+const STAT_DETAIL_METRICS = {
+  totalStaked: {
+    label: 'Total stakes',
+    color: 'var(--accent)',
+    getValue: (betsInGroup) => betsInGroup.reduce((sum, b) => sum + totalStake(b), 0),
+  },
+  openStaked: {
+    label: 'Open stakes',
+    color: 'var(--accent)',
+    getValue: (betsInGroup) => betsInGroup.filter(b => b.status === 'open').reduce((sum, b) => sum + totalStake(b), 0),
+  },
+  settledReturn: {
+    label: 'Settled return',
+    color: 'var(--accent)',
+    getValue: (betsInGroup) => betsInGroup
+      .filter(b => b.status !== 'open')
+      .reduce((sum, b) => sum + (b.actualReturn !== null && b.actualReturn !== undefined && b.actualReturn !== '' ? Number(b.actualReturn) : 0), 0),
+  },
+  // Profit/loss additionally gets a cumulative line chart above its bookmaker breakdown — see
+  // openStatDetailModal. Open bets are excluded since they haven't settled yet.
+  pl: {
+    label: 'Profit / Loss',
+    color: (v) => v >= 0 ? 'var(--win-green)' : 'var(--red)',
+    getValue: (betsInGroup) => betsInGroup.filter(b => b.status !== 'open').reduce((sum, b) => sum + betPl(b), 0),
+  },
+};
+
+function betPl(b) {
+  const actual = b.actualReturn !== null && b.actualReturn !== undefined && b.actualReturn !== '' ? Number(b.actualReturn) : 0;
+  return actual - totalStake(b);
+}
+
+// One point per date that has at least one settled bet — "Daily" is that date's own P&L,
+// "Total" is the running cumulative P&L up to and including that date.
+function getPnlLineSeries() {
+  const byDate = {};
+  getStatsScopedBets().filter(b => b.status !== 'open').forEach(b => {
+    byDate[b.datePlaced] = (byDate[b.datePlaced] || 0) + betPl(b);
+  });
+  let running = 0;
+  return Object.keys(byDate).sort().map(date => {
+    running += byDate[date];
+    return { label: new Date(date + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }), daily: byDate[date], total: running };
+  });
+}
+
+function formatMonthLabel(monthKey) {
+  const [y, m] = monthKey.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+}
+
+function groupBetsBy(keyFn) {
+  const groups = {};
+  getStatsScopedBets().forEach(b => {
+    const key = keyFn(b);
+    (groups[key] || (groups[key] = [])).push(b);
+  });
+  return groups;
+}
+
+function getMonthlyMetricBreakdown(metricKey) {
+  const getValue = STAT_DETAIL_METRICS[metricKey].getValue;
+  const byMonth = groupBetsBy(b => b.datePlaced.slice(0, 7));
+  return Object.keys(byMonth).sort().map(key => ({ label: formatMonthLabel(key), value: getValue(byMonth[key]) }));
+}
+
+function getBookmakerMetricBreakdown(metricKey) {
+  const getValue = STAT_DETAIL_METRICS[metricKey].getValue;
+  const byBookmaker = groupBetsBy(b => b.bookmaker || 'Unknown');
+  return Object.keys(byBookmaker)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+    .map(key => ({ label: key, value: getValue(byBookmaker[key]) }));
+}
+
+// Picks a "nice" round step (1/2/5 x a power of ten — e.g. 100, 200, 500, 1000) so axis
+// labels land on numbers like 100, 200, 300 rather than whatever the data's actual min/max are.
+function computeNiceTicks(minVal, maxVal, targetCount) {
+  if (minVal === maxVal) { minVal -= 1; maxVal += 1; }
+  const roughStep = (maxVal - minVal) / targetCount;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+  const residual = roughStep / magnitude;
+  const step = (residual > 5 ? 10 : residual > 2 ? 5 : residual > 1 ? 2 : 1) * magnitude;
+
+  const niceMin = Math.floor(minVal / step) * step;
+  const niceMax = Math.ceil(maxVal / step) * step;
+  const ticks = [];
+  for (let v = niceMin; v <= niceMax + step / 2; v += step) {
+    ticks.push(Math.round(v * 100) / 100);
+  }
+  return ticks;
+}
+
+// Simple hand-rolled SVG bar chart — no charting library dependency. Bars extend up from (or
+// down through) a zero baseline, so metrics that can go negative (e.g. profit/loss) still work.
+function renderSingleBarChart(container, groups, color) {
+  if (groups.length === 0) {
+    container.innerHTML = '<p class="chart-empty">No data yet.</p>';
+    return;
+  }
+
+  const width = 820, height = 240;
+  const marginLeft = 60, marginRight = 16, marginTop = 16, marginBottom = 58;
+  const plotWidth = width - marginLeft - marginRight;
+  const plotHeight = height - marginTop - marginBottom;
+
+  const dataMax = Math.max(0, ...groups.map(g => g.value));
+  const dataMin = Math.min(0, ...groups.map(g => g.value));
+  const ticks = computeNiceTicks(dataMin, dataMax, 5);
+  const minVal = ticks[0];
+  const maxVal = ticks[ticks.length - 1];
+  const range = (maxVal - minVal) || 1;
+  const yScale = (v) => marginTop + plotHeight - ((v - minVal) / range) * plotHeight;
+
+  const groupWidth = plotWidth / groups.length;
+  const barPadding = groupWidth * 0.25;
+  const barWidth = groupWidth - barPadding * 2;
+
+  let svg = `<svg viewBox="0 0 ${width} ${height}" class="bar-chart" preserveAspectRatio="xMinYMin meet">`;
+  ticks.forEach(v => {
+    const y = yScale(v);
+    svg += `<line x1="${marginLeft}" y1="${y}" x2="${width - marginRight}" y2="${y}" class="${v === 0 ? 'chart-axis-line' : 'chart-gridline'}" />`;
+    svg += `<text x="${marginLeft - 8}" y="${y + 4}" class="chart-axis-label" text-anchor="end">${money(v)}</text>`;
+  });
+
+  groups.forEach((g, i) => {
+    const groupX = marginLeft + i * groupWidth;
+    const y1 = yScale(Math.max(0, g.value));
+    const y2 = yScale(Math.min(0, g.value));
+    const barH = Math.max(1, Math.abs(y2 - y1));
+    const barX = groupX + barPadding;
+    const barColor = typeof color === 'function' ? color(g.value) : color;
+    svg += `<rect x="${barX.toFixed(1)}" y="${Math.min(y1, y2).toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" fill="${barColor}"><title>${escapeHtml(g.label)}: ${money(g.value)}</title></rect>`;
+    const labelX = (groupX + groupWidth / 2).toFixed(1);
+    svg += `<text x="${labelX}" y="${height - marginBottom + 18}" class="chart-axis-label" text-anchor="middle">${escapeHtml(g.label)}</text>`;
+    svg += `<text x="${labelX}" y="${height - marginBottom + 32}" class="chart-value-label" text-anchor="middle">${money(g.value)}</text>`;
+  });
+
+  svg += `</svg>`;
+  container.innerHTML = svg;
+}
+
+// Line chart of cumulative Total P&L over time, plotted against the same nice-rounded Y axis
+// as the bar charts.
+function renderLineChart(container, series) {
+  if (series.length === 0) {
+    container.innerHTML = '<p class="chart-empty">No data yet.</p>';
+    return;
+  }
+
+  const width = 820, height = 240;
+  const marginLeft = 60, marginRight = 16, marginTop = 16, marginBottom = 44;
+  const plotWidth = width - marginLeft - marginRight;
+  const plotHeight = height - marginTop - marginBottom;
+
+  const allValues = series.map(p => p.total);
+  const ticks = computeNiceTicks(Math.min(0, ...allValues), Math.max(0, ...allValues), 5);
+  const minVal = ticks[0], maxVal = ticks[ticks.length - 1];
+  const range = (maxVal - minVal) || 1;
+  const yScale = (v) => marginTop + plotHeight - ((v - minVal) / range) * plotHeight;
+
+  const n = series.length;
+  const xScale = (i) => n === 1 ? marginLeft + plotWidth / 2 : marginLeft + (i / (n - 1)) * plotWidth;
+
+  let svg = `<svg viewBox="0 0 ${width} ${height}" class="bar-chart" preserveAspectRatio="xMinYMin meet">`;
+  ticks.forEach(v => {
+    const y = yScale(v);
+    svg += `<line x1="${marginLeft}" y1="${y}" x2="${width - marginRight}" y2="${y}" class="${v === 0 ? 'chart-axis-line' : 'chart-gridline'}" />`;
+    svg += `<text x="${marginLeft - 8}" y="${y + 4}" class="chart-axis-label" text-anchor="end">${money(v)}</text>`;
+  });
+
+  const points = series.map((p, i) => `${xScale(i).toFixed(1)},${yScale(p.total).toFixed(1)}`).join(' ');
+  svg += `<polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="2" />`;
+
+  series.forEach((p, i) => {
+    const x = xScale(i).toFixed(1);
+    const y = yScale(p.total).toFixed(1);
+    const tooltip = `<title>${escapeHtml(p.label)} — Total: ${money(p.total)}</title>`;
+    // A larger invisible circle sits behind the visible dot purely to make hovering easy —
+    // the tiny visible dot alone is a hard target to land the mouse on.
+    svg += `<circle cx="${x}" cy="${y}" r="10" fill="transparent">${tooltip}</circle>`;
+    svg += `<circle cx="${x}" cy="${y}" r="3.5" fill="var(--accent)" pointer-events="none">${tooltip}</circle>`;
+  });
+
+  const labelStep = Math.max(1, Math.ceil(n / 10));
+  series.forEach((p, i) => {
+    if (i % labelStep !== 0 && i !== n - 1) return;
+    svg += `<text x="${xScale(i).toFixed(1)}" y="${height - marginBottom + 18}" class="chart-axis-label" text-anchor="middle">${escapeHtml(p.label)}</text>`;
+  });
+
+  svg += `</svg>`;
+
+  container.innerHTML = `<div class="chart-wrap">${svg}</div>`;
+}
+
+function openStatDetailModal(metricKey) {
+  const metric = STAT_DETAIL_METRICS[metricKey];
+  if (!metric) return;
+  document.getElementById('stat-detail-title').textContent = metric.label;
+  const body = document.getElementById('stat-detail-body');
+
+  if (metricKey === 'pl') {
+    body.innerHTML = `
+      <div class="chart-block"><div id="pl-line-chart"></div></div>
+      <div class="chart-block">
+        <h3>By bookmaker</h3>
+        <div class="chart-wrap" id="pl-bookmaker-chart"></div>
+      </div>
+    `;
+    renderLineChart(document.getElementById('pl-line-chart'), getPnlLineSeries());
+    renderSingleBarChart(document.getElementById('pl-bookmaker-chart'), getBookmakerMetricBreakdown('pl'), metric.color);
+  } else {
+    body.innerHTML = `
+      <div class="chart-block">
+        <h3>By month</h3>
+        <div class="chart-wrap" id="stat-detail-monthly-chart"></div>
+      </div>
+      <div class="chart-block">
+        <h3>By bookmaker</h3>
+        <div class="chart-wrap" id="stat-detail-bookmaker-chart"></div>
+      </div>
+    `;
+    renderSingleBarChart(document.getElementById('stat-detail-monthly-chart'), getMonthlyMetricBreakdown(metricKey), metric.color);
+    renderSingleBarChart(document.getElementById('stat-detail-bookmaker-chart'), getBookmakerMetricBreakdown(metricKey), metric.color);
+  }
+
+  document.getElementById('stat-detail-backdrop').hidden = false;
 }
 
 function renderBetsList() {
@@ -1088,9 +1345,131 @@ function attachFixedDropdown(input, options) {
   });
 }
 
-// Generic themed autocomplete dropdown — used for competition, selection, market, and EW
-// fraction so they all get the site's own styling instead of the browser's unthemed native popup.
-function attachAutocomplete(input, getSuggestions, onAccept) {
+// Fully themed replacement for a native <select> with a small fixed option list (status, bet
+// type) — the underlying <select> keeps working exactly as before (same id, value, required,
+// 'change' event) for the rest of the code, since a native <select>'s own open dropdown can't
+// be fully themed cross-browser. Only its visual rendering is replaced with a clickable proxy
+// that opens the same autocomplete-list widget used everywhere else.
+function attachSelectDropdown(select) {
+  select.tabIndex = -1;
+  const parent = select.parentNode;
+  const wrap = document.createElement('div');
+  wrap.className = 'autocomplete-wrap select-dropdown-wrap';
+  parent.insertBefore(wrap, select);
+  if (parent.tagName === 'LABEL') {
+    // Move the real <select> out of the <label> entirely, rather than leaving it nested inside
+    // (just hidden) — a label's default action on click is to focus/activate whichever form
+    // control it contains, which would otherwise fight this proxy for focus on every click and
+    // close the list almost as soon as it opens. It stays in the form (just relocated) so
+    // `.value` reads/writes and the 'change' event keep working everywhere else in the code.
+    parent.parentNode.insertBefore(select, parent.nextSibling);
+  } else {
+    wrap.appendChild(select);
+  }
+  select.hidden = true;
+
+  const proxy = document.createElement('div');
+  proxy.className = 'select-dropdown-proxy';
+  proxy.tabIndex = 0;
+  wrap.appendChild(proxy);
+
+  const list = document.createElement('div');
+  list.className = 'autocomplete-list';
+  list.hidden = true;
+  wrap.appendChild(list);
+
+  const getOptions = () => [...select.options].filter(o => !o.disabled);
+
+  function syncProxyText() {
+    const opt = select.options[select.selectedIndex];
+    proxy.textContent = opt ? opt.textContent : '';
+  }
+
+  let activeIndex = -1;
+
+  function updateActive() {
+    [...list.children].forEach((el, i) => el.classList.toggle('active', i === activeIndex));
+  }
+
+  function close() {
+    list.hidden = true;
+    list.innerHTML = '';
+    activeIndex = -1;
+  }
+
+  function open() {
+    const opts = getOptions();
+    activeIndex = Math.max(0, opts.findIndex(o => o.value === select.value));
+    list.innerHTML = opts.map((o, i) => `<div class="autocomplete-item ${i === activeIndex ? 'active' : ''}" data-index="${i}">${escapeHtml(o.textContent)}</div>`).join('');
+    list.hidden = false;
+  }
+
+  function accept(index) {
+    const opts = getOptions();
+    if (index < 0 || index >= opts.length) return;
+    select.value = opts[index].value;
+    close();
+    syncProxyText();
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  proxy.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    proxy.focus();
+    if (list.hidden) open(); else close();
+  });
+  // The proxy sits inside a <label>, and a label's default action on 'click' (a separate event
+  // from 'mousedown') is to focus/activate its associated form control — here, that's the real
+  // (hidden) <select>, not this proxy. Left unchecked, that steals focus straight back off the
+  // proxy the instant it's clicked, firing the blur-close handler below almost immediately.
+  proxy.addEventListener('click', (e) => e.preventDefault());
+  proxy.addEventListener('keydown', (e) => {
+    if (list.hidden) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIndex = Math.min(activeIndex + 1, getOptions().length - 1);
+      updateActive();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIndex = Math.max(activeIndex - 1, 0);
+      updateActive();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      accept(activeIndex);
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+  proxy.addEventListener('blur', () => setTimeout(close, 150));
+  list.addEventListener('mousedown', (e) => {
+    const itemEl = e.target.closest('.autocomplete-item');
+    if (itemEl) { e.preventDefault(); accept(Number(itemEl.dataset.index)); }
+  });
+
+  select.addEventListener('change', syncProxyText);
+  // Existing code elsewhere sets `.value` directly (e.g. loading a bet into the edit form) —
+  // that doesn't fire a 'change' event, so intercept the setter itself to keep the proxy text
+  // in sync no matter how the value gets changed. betForm.reset() bypasses even that (native
+  // form reset doesn't go through the IDL setter), so also resync on the form's 'reset' event.
+  const nativeValueDescriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+  Object.defineProperty(select, 'value', {
+    get() { return nativeValueDescriptor.get.call(select); },
+    set(v) { nativeValueDescriptor.set.call(select, v); syncProxyText(); },
+    configurable: true,
+  });
+  if (select.form) select.form.addEventListener('reset', () => syncProxyText());
+  syncProxyText();
+}
+
+// Generic themed autocomplete dropdown — used for competition, selection, market, and
+// bookmaker so they all get the site's own styling instead of the browser's unthemed native
+// popup. `showAllWhenEmpty` makes clicking into an empty field browse every known value
+// immediately (like the old bookmaker <select> did), instead of waiting for the first keystroke
+// — appropriate for short lists like bookmakers, not for selection/market which can grow large.
+function attachAutocomplete(input, getSuggestions, onAccept, { showAllWhenEmpty = false } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'autocomplete-wrap';
   input.parentNode.insertBefore(wrap, input);
@@ -1117,11 +1496,15 @@ function attachAutocomplete(input, getSuggestions, onAccept) {
 
   function render() {
     const query = input.value.trim().toLowerCase();
-    if (!query) { close(); return; }
-    items = getSuggestions(input)
-      .filter(v => v.toLowerCase().startsWith(query) && v.toLowerCase() !== query)
-      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
-      .slice(0, 8);
+    if (!query) {
+      if (!showAllWhenEmpty) { close(); return; }
+      items = getSuggestions(input).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).slice(0, 20);
+    } else {
+      items = getSuggestions(input)
+        .filter(v => v.toLowerCase().startsWith(query) && v.toLowerCase() !== query)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+        .slice(0, 8);
+    }
     if (items.length === 0) { close(); return; }
     activeIndex = 0;
     list.innerHTML = items.map((v, i) => `<div class="autocomplete-item ${i === 0 ? 'active' : ''}" data-index="${i}">${escapeHtml(v)}</div>`).join('');
@@ -1137,6 +1520,13 @@ function attachAutocomplete(input, getSuggestions, onAccept) {
   }
 
   input.addEventListener('input', render);
+  if (showAllWhenEmpty) {
+    // Listening for 'focus' alone isn't enough — if the field happens to already be focused
+    // (e.g. the browser auto-focuses the first empty required field when the modal opens),
+    // clicking it again fires no new focus event, so the list would never open.
+    input.addEventListener('focus', render);
+    input.addEventListener('click', render);
+  }
   input.addEventListener('keydown', (e) => {
     if (list.hidden) return;
     if (e.key === 'ArrowDown') {
@@ -1349,6 +1739,12 @@ function updateActualReturnMode() {
 }
 
 document.getElementById('f-status').addEventListener('change', updateActualReturnMode);
+attachAutocomplete(document.getElementById('f-bookmaker'), getKnownBookmakers, null, { showAllWhenEmpty: true });
+attachSelectDropdown(document.getElementById('f-status'));
+attachSelectDropdown(document.getElementById('f-bet-type'));
+attachSelectDropdown(document.getElementById('filter-bookmaker'));
+attachSelectDropdown(document.getElementById('filter-bet-type'));
+attachSelectDropdown(document.getElementById('sort-by'));
 selectionsEditor.addEventListener('input', (e) => {
   if (e.target.matches('.sel-price, .sel-ew-fraction, .sel-ew-places')) recalcModalTotals();
 
@@ -1424,6 +1820,9 @@ document.getElementById('f-screenshot').addEventListener('change', (e) => {
   if (file) runScan(file);
 });
 document.getElementById('btn-add').addEventListener('click', () => openModal(null));
+document.getElementById('btn-close-stat-detail').addEventListener('click', () => {
+  document.getElementById('stat-detail-backdrop').hidden = true;
+});
 document.getElementById('btn-close-modal').addEventListener('click', closeModal);
 document.getElementById('btn-cancel').addEventListener('click', closeModal);
 document.getElementById('btn-add-selection').addEventListener('click', () => { addSelectionRow(); recalcModalTotals(); });
