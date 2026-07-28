@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PC Ante-Post Bet Tracker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <h1>⚽ PC Ante-Post Bet Tracker</h1>
+  <div class="header-actions">
+    <button id="btn-add" class="btn btn-primary">+ Add Bet</button>
+    <button id="btn-export" class="btn btn-ghost">Export</button>
+    <button id="btn-import" class="btn btn-ghost">Import</button>
+    <input type="file" id="import-file" accept="application/json" hidden>
+  </div>
+</header>
+
+<section class="stats-bar" id="stats-bar"></section>
+
+<section class="filters-bar">
+  <input type="text" id="search-input" placeholder="Search selections...">
+  <input type="hidden" id="filter-status" value="">
+  <select id="filter-bookmaker">
+    <option value="">All bookmakers</option>
+    <option value="AK Bets">AK Bets</option>
+    <option value="Bet365">Bet365</option>
+    <option value="Bet365 (KR)">Bet365 (KR)</option>
+    <option value="Betano">Betano</option>
+    <option value="Betway">Betway</option>
+    <option value="Ladbrokes">Ladbrokes</option>
+    <option value="Lottoland">Lottoland</option>
+    <option value="PricedUp">PricedUp</option>
+    <option value="Sky Bet">Sky Bet</option>
+    <option value="William Hill">William Hill</option>
+  </select>
+  <select id="filter-bet-type">
+    <option value="">All bet types</option>
+    <option value="win">Win only</option>
+    <option value="each-way">Each way</option>
+  </select>
+  <label class="date-filter">From <input type="date" id="filter-date-from"></label>
+  <label class="date-filter">To <input type="date" id="filter-date-to"></label>
+  <select id="sort-by">
+    <option value="date-desc">Newest first</option>
+    <option value="stake-desc">Stake: high to low</option>
+    <option value="odds-desc">Odds: high to low</option>
+    <option value="potential-return-desc">Potential return: high to low</option>
+    <option value="actual-return-desc">Actual return: high to low</option>
+  </select>
+  <button id="btn-clear-filters" class="btn btn-ghost">Clear filters</button>
+</section>
+
+<main id="bets-list" class="bets-list"></main>
+<p id="empty-state" class="empty-state" hidden>No bets match your filters.</p>
+
+<div id="pagination" class="pagination" hidden>
+  <button type="button" id="btn-prev-page" class="btn btn-ghost">‹ Prev</button>
+  <span id="pagination-info"></span>
+  <button type="button" id="btn-next-page" class="btn btn-ghost">Next ›</button>
+</div>
+
+<!-- Add / Edit Bet Modal -->
+<div id="modal-backdrop" class="modal-backdrop" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Add Bet</h2>
+      <button id="btn-close-modal" class="btn-close">&times;</button>
+    </div>
+    <form id="bet-form">
+      <input type="hidden" id="bet-id">
+
+      <div class="scan-block">
+        <button type="button" id="btn-scan" class="btn btn-ghost">📷 Scan bookmaker screenshot</button>
+        <input type="file" id="f-screenshot" accept="image/*" hidden>
+        <span id="scan-status" class="field-note" hidden></span>
+        <details id="scan-text-wrap" hidden>
+          <summary>Show extracted text</summary>
+          <pre id="scan-text"></pre>
+        </details>
+      </div>
+
+      <div class="form-row">
+        <label>Date placed
+          <input type="date" id="f-date" required>
+        </label>
+        <label>Bookmaker
+          <select id="f-bookmaker" required>
+            <option value="" disabled selected>Select bookmaker</option>
+            <option value="AK Bets">AK Bets</option>
+            <option value="Bet365">Bet365</option>
+            <option value="Bet365 (KR)">Bet365 (KR)</option>
+            <option value="Betano">Betano</option>
+            <option value="Betway">Betway</option>
+            <option value="Ladbrokes">Ladbrokes</option>
+            <option value="Lottoland">Lottoland</option>
+            <option value="PricedUp">PricedUp</option>
+            <option value="Sky Bet">Sky Bet</option>
+            <option value="William Hill">William Hill</option>
+          </select>
+        </label>
+        <label>Status
+          <select id="f-status">
+            <option value="open">Open</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+            <option value="cash-out">Cash Out</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="form-row">
+        <label>Bet type
+          <select id="f-bet-type">
+            <option value="win">Win only</option>
+            <option value="each-way">Each way</option>
+          </select>
+        </label>
+        <label>Win stake
+          <div class="money-field">
+            <span class="money-prefix">£</span>
+            <input type="number" id="f-win-stake" step="0.01" min="0" required>
+          </div>
+        </label>
+        <label id="ew-stake-wrap" hidden>Each way stake
+          <div class="money-field">
+            <span class="money-prefix">£</span>
+            <input type="number" id="f-ew-stake" step="0.01" min="0" readonly>
+          </div>
+        </label>
+      </div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="f-manual-odds">
+        <span>I don't have prices for each selection — enter total odds manually</span>
+      </div>
+
+      <div class="form-row">
+        <label>Total odds
+          <input type="text" id="f-odds" readonly placeholder="—">
+          <span id="f-place-odds-note" class="field-note" hidden></span>
+        </label>
+        <label>Potential return
+          <div class="money-field">
+            <span class="money-prefix">£</span>
+            <input type="text" id="f-potential-return" readonly placeholder="—">
+          </div>
+        </label>
+        <label>Actual return
+          <div class="money-field">
+            <span class="money-prefix">£</span>
+            <input type="number" id="f-actual-return" step="0.01" min="0">
+          </div>
+        </label>
+      </div>
+
+      <h3>Selections</h3>
+      <p class="selections-hint">Enter each selection's own price. For each-way bets, also add that selection's each-way terms.</p>
+      <div id="selections-editor"></div>
+      <button type="button" id="btn-add-selection" class="btn btn-ghost">+ Add selection</button>
+
+
+      <div class="modal-footer">
+        <button type="button" id="btn-delete-bet" class="btn btn-danger" hidden>Delete bet</button>
+        <div class="modal-footer-right">
+          <button type="button" id="btn-cancel" class="btn btn-ghost">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save bet</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
