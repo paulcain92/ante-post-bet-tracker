@@ -12,6 +12,7 @@
   <h1>⚽ PC Ante-Post Bet Tracker 📈</h1>
   <div class="header-actions">
     <button id="btn-add" class="btn btn-primary">+ Add Bet</button>
+    <button id="btn-top-selections" class="btn btn-ghost">🔝 Top Selections</button>
     <button id="btn-export" class="btn btn-ghost">Export</button>
     <button id="btn-import" class="btn btn-ghost">Import</button>
     <input type="file" id="import-file" accept="application/json" hidden>
@@ -62,6 +63,17 @@
       <button id="btn-close-stat-detail" class="btn-close">&times;</button>
     </div>
     <div id="stat-detail-body"></div>
+  </div>
+</div>
+
+<!-- Top Selections Modal -->
+<div id="top-selections-backdrop" class="modal-backdrop" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Top 10 Open Selections</h2>
+      <button id="btn-close-top-selections" class="btn-close">&times;</button>
+    </div>
+    <div id="top-selections-list"></div>
   </div>
 </div>
 

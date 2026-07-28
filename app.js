@@ -885,6 +885,42 @@ function openStatDetailModal(metricKey) {
   document.getElementById('stat-detail-backdrop').hidden = false;
 }
 
+// Counts each distinct (selection, market, competition) combo across every OPEN, non-void
+// selection in every bet — regardless of the current filters, since this is meant as a global
+// "what am I most exposed to right now" view, not scoped to whatever's on screen.
+function getTopOpenSelections(limit) {
+  const counts = {};
+  bets.filter(b => b.status === 'open').forEach(b => {
+    b.selections.forEach(s => {
+      if (s.void || !s.selection) return;
+      const key = `${s.selection}|||${s.market}|||${s.competition}`;
+      if (!counts[key]) counts[key] = { selection: s.selection, market: s.market, competition: s.competition, count: 0 };
+      counts[key].count++;
+    });
+  });
+  return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, limit);
+}
+
+function openTopSelectionsModal() {
+  const top = getTopOpenSelections(10);
+  const container = document.getElementById('top-selections-list');
+  if (top.length === 0) {
+    container.innerHTML = '<p class="chart-empty">No open selections yet.</p>';
+  } else {
+    container.innerHTML = top.map((item, i) => `
+      <div class="top-selection-row">
+        <span class="top-selection-rank">${i + 1}</span>
+        <div class="top-selection-info">
+          <b>${escapeHtml(item.selection)}</b>
+          <span class="chip-market">${escapeHtml(item.market)}${item.competition ? ' · ' + escapeHtml(item.competition) : ''}</span>
+        </div>
+        <span class="top-selection-count">${item.count} bet${item.count === 1 ? '' : 's'}</span>
+      </div>
+    `).join('');
+  }
+  document.getElementById('top-selections-backdrop').hidden = false;
+}
+
 function renderBetsList() {
   const fullList = getFilteredSortedBets();
   const container = document.getElementById('bets-list');
@@ -1832,6 +1868,10 @@ document.getElementById('f-screenshot').addEventListener('change', (e) => {
 document.getElementById('btn-add').addEventListener('click', () => openModal(null));
 document.getElementById('btn-close-stat-detail').addEventListener('click', () => {
   document.getElementById('stat-detail-backdrop').hidden = true;
+});
+document.getElementById('btn-top-selections').addEventListener('click', openTopSelectionsModal);
+document.getElementById('btn-close-top-selections').addEventListener('click', () => {
+  document.getElementById('top-selections-backdrop').hidden = true;
 });
 document.getElementById('btn-close-modal').addEventListener('click', closeModal);
 document.getElementById('btn-cancel').addEventListener('click', closeModal);
