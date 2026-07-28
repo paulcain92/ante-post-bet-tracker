@@ -70,7 +70,10 @@
 <div id="top-selections-backdrop" class="modal-backdrop" hidden>
   <div class="modal">
     <div class="modal-header">
-      <h2>Top 10 Open Selections</h2>
+      <div class="modal-header-title">
+        <button type="button" id="btn-top-selections-back" class="btn-back" hidden title="Back">‹</button>
+        <h2 id="top-selections-title">Top 10 Open Selections</h2>
+      </div>
       <button id="btn-close-top-selections" class="btn-close">&times;</button>
     </div>
     <div id="top-selections-list"></div>
@@ -81,7 +84,10 @@
 <div id="modal-backdrop" class="modal-backdrop" hidden>
   <div class="modal">
     <div class="modal-header">
-      <h2 id="modal-title">Add Bet</h2>
+      <div class="modal-header-title">
+        <button type="button" id="btn-modal-back" class="btn-back" hidden title="Back">‹</button>
+        <h2 id="modal-title">Add Bet</h2>
+      </div>
       <button id="btn-close-modal" class="btn-close">&times;</button>
     </div>
     <form id="bet-form">

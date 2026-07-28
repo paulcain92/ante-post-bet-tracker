@@ -4,6 +4,9 @@ let bets = loadBets();
 let draggedSelectionBlock = null; // the .selection-block currently being dragged to reorder, in the Add/Edit form
 let currentPage = 1;
 const PAGE_SIZE = 20;
+// Set when the Add/Edit modal is opened from a Top Selections drill-down row, so closing,
+// saving, or deleting that bet drops back into the same drill-down list instead of just closing.
+let topSelectionsReturnContext = null;
 
 function loadBets() {
   try {
@@ -901,23 +904,101 @@ function getTopOpenSelections(limit) {
   return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, limit);
 }
 
-function openTopSelectionsModal() {
+function getOpenBetsForSelection(selection, market, competition) {
+  return bets.filter(b => b.status === 'open' && (b.selections || []).some(s =>
+    !s.void && s.selection === selection && s.market === market && s.competition === competition
+  ));
+}
+
+function renderTopSelectionsRanking() {
+  document.getElementById('btn-top-selections-back').hidden = true;
+  document.getElementById('top-selections-title').textContent = 'Top 10 Open Selections';
   const top = getTopOpenSelections(10);
   const container = document.getElementById('top-selections-list');
   if (top.length === 0) {
     container.innerHTML = '<p class="chart-empty">No open selections yet.</p>';
-  } else {
-    container.innerHTML = top.map((item, i) => `
-      <div class="top-selection-row">
-        <span class="top-selection-rank">${i + 1}</span>
-        <div class="top-selection-info">
-          <b>${escapeHtml(item.selection)}</b>
-          <span class="chip-market">${escapeHtml(item.market)}${item.competition ? ' · ' + escapeHtml(item.competition) : ''}</span>
-        </div>
-        <span class="top-selection-count">${item.count} bet${item.count === 1 ? '' : 's'}</span>
-      </div>
-    `).join('');
+    return;
   }
+  container.innerHTML = top.map((item, i) => `
+    <div class="top-selection-row top-selection-row-clickable" data-selection="${escapeHtml(item.selection)}" data-market="${escapeHtml(item.market)}" data-competition="${escapeHtml(item.competition)}" role="button" tabindex="0">
+      <span class="top-selection-rank">${i + 1}</span>
+      <div class="top-selection-info">
+        <b>${escapeHtml(item.selection)}</b>
+        <span class="chip-market">${escapeHtml(item.market)}${item.competition ? ' · ' + escapeHtml(item.competition) : ''}</span>
+      </div>
+      <span class="top-selection-count">${item.count} bet${item.count === 1 ? '' : 's'}</span>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('.top-selection-row-clickable').forEach(row => {
+    const activate = () => renderTopSelectionsDrilldown(row.dataset.selection, row.dataset.market, row.dataset.competition);
+    row.addEventListener('click', activate);
+    row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
+  });
+}
+
+// Read-only version of the main list's chips — no tick buttons, since this is just a quick
+// look at what's in the accumulator, not a place to record results.
+function buildReadOnlyChips(bet) {
+  return bet.selections.map(s => {
+    const result = s.result || 'pending';
+    const resultClass = s.void ? 'chip-void' : result === 'won' ? 'chip-won' : result === 'placed' ? 'chip-placed' : result === 'lost' ? 'chip-lost' : '';
+    return `<span class="chip ${resultClass}">
+              <b>${escapeHtml(s.selection)}</b> <span class="chip-market">— ${escapeHtml(s.market)}${s.competition ? ' · ' + escapeHtml(s.competition) : ''}${s.price ? ' @ ' + escapeHtml(s.price) : ''}${s.void ? ' · Void' : ''}</span>
+            </span>`;
+  }).join('');
+}
+
+// Drills into whichever open bets contain this exact (selection, market, competition) combo —
+// clicking a row expands its full selection list inline, rather than jumping into editing.
+function renderTopSelectionsDrilldown(selection, market, competition) {
+  document.getElementById('btn-top-selections-back').hidden = false;
+  document.getElementById('top-selections-title').textContent = selection;
+  const matches = getOpenBetsForSelection(selection, market, competition);
+  const container = document.getElementById('top-selections-list');
+  container.innerHTML = matches.map(b => `
+    <div class="drilldown-bet-block">
+      <div class="drilldown-bet-row" data-id="${b.id}" role="button" tabindex="0">
+        <div class="drilldown-bet-info">
+          <span class="date">${formatDate(b.datePlaced)}</span>
+          <span class="bookmaker">${escapeHtml(b.bookmaker)}</span>
+          <span>${formatFoldLabel(b.selections.length)}${b.betType === 'each-way' ? ' · EW' : ''}</span>
+        </div>
+        <div class="drilldown-bet-figures">
+          <span>Odds <b>${formatOdds(b.totalOdds, b.totalOddsRaw)}</b></span>
+          <span>Stake <b>${money(totalStake(b))}</b></span>
+          <span>Potential <b>${money(b.potentialReturn)}</b></span>
+        </div>
+      </div>
+      <div class="drilldown-bet-detail" hidden>
+        <div class="selections-chips">${buildReadOnlyChips(b)}</div>
+        <button type="button" class="btn-drilldown-edit" data-id="${b.id}">✏️ Edit bet</button>
+      </div>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('.drilldown-bet-row').forEach(row => {
+    const toggle = () => {
+      const detail = row.nextElementSibling;
+      detail.hidden = !detail.hidden;
+    };
+    row.addEventListener('click', toggle);
+    row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  });
+
+  container.querySelectorAll('.btn-drilldown-edit').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const bet = bets.find(b => b.id === btn.dataset.id);
+      if (!bet) return;
+      document.getElementById('top-selections-backdrop').hidden = true;
+      openModal(bet, { fromTopSelections: { selection, market, competition } });
+    });
+  });
+}
+
+function openTopSelectionsModal() {
+  renderTopSelectionsRanking();
   document.getElementById('top-selections-backdrop').hidden = false;
 }
 
@@ -1097,6 +1178,8 @@ const betForm = document.getElementById('bet-form');
 const selectionsEditor = document.getElementById('selections-editor');
 
 function openModal(bet, options = {}) {
+  topSelectionsReturnContext = options.fromTopSelections || null;
+  document.getElementById('btn-modal-back').hidden = !options.fromTopSelections;
   const isDuplicate = options.duplicate === true;
   betForm.reset();
   document.getElementById('scan-status').hidden = true;
@@ -1149,6 +1232,12 @@ function openModal(bet, options = {}) {
 
 function closeModal() {
   modalBackdrop.hidden = true;
+  if (topSelectionsReturnContext) {
+    const { selection, market, competition } = topSelectionsReturnContext;
+    topSelectionsReturnContext = null;
+    renderTopSelectionsDrilldown(selection, market, competition);
+    document.getElementById('top-selections-backdrop').hidden = false;
+  }
 }
 
 function updateEwFieldsVisibility() {
@@ -1870,10 +1959,12 @@ document.getElementById('btn-close-stat-detail').addEventListener('click', () =>
   document.getElementById('stat-detail-backdrop').hidden = true;
 });
 document.getElementById('btn-top-selections').addEventListener('click', openTopSelectionsModal);
+document.getElementById('btn-top-selections-back').addEventListener('click', renderTopSelectionsRanking);
 document.getElementById('btn-close-top-selections').addEventListener('click', () => {
   document.getElementById('top-selections-backdrop').hidden = true;
 });
 document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+document.getElementById('btn-modal-back').addEventListener('click', closeModal);
 document.getElementById('btn-cancel').addEventListener('click', closeModal);
 document.getElementById('btn-add-selection').addEventListener('click', () => { addSelectionRow(); recalcModalTotals(); });
 
