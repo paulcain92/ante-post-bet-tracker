@@ -210,6 +210,8 @@ body {
 .chip.chip-won .chip-market { color: var(--on-win-green); opacity: 0.8; }
 .chip.chip-placed { background: var(--place-green); color: var(--on-place-green); border-color: var(--place-green); }
 .chip.chip-placed .chip-market { color: var(--on-place-green); opacity: 0.8; }
+.chip.chip-lost { background: var(--red); color: #fff; border-color: var(--red); }
+.chip.chip-lost .chip-market { color: #fff; opacity: 0.8; }
 .chip.chip-void { opacity: 0.55; text-decoration: line-through; cursor: default; }
 .chip.chip-void:hover { border-color: var(--border); color: var(--text); }
 
@@ -230,7 +232,7 @@ body {
   vertical-align: -2px;
   padding: 0;
 }
-.chip-won .chip-tick, .chip-placed .chip-tick { border-color: currentColor; }
+.chip-won .chip-tick, .chip-placed .chip-tick, .chip-lost .chip-tick { border-color: currentColor; }
 
 .search-highlight {
   background: var(--accent);

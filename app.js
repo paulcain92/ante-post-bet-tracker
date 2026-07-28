@@ -919,9 +919,9 @@ function renderBetsList() {
     const canTrackResults = bet.status === 'open';
     const chips = bet.selections.map((s, selIndex) => {
       const result = s.result || 'pending';
-      const resultClass = s.void ? 'chip-void' : result === 'won' ? 'chip-won' : result === 'placed' ? 'chip-placed' : '';
-      const tickIcon = result === 'won' ? '✓' : result === 'placed' ? 'P' : '';
-      const tickTitle = result === 'won' ? 'Won — click to change' : result === 'placed' ? 'Placed (each-way) — click to change' : 'Mark as won';
+      const resultClass = s.void ? 'chip-void' : result === 'won' ? 'chip-won' : result === 'placed' ? 'chip-placed' : result === 'lost' ? 'chip-lost' : '';
+      const tickIcon = result === 'won' ? '✓' : result === 'placed' ? 'P' : result === 'lost' ? '✗' : '';
+      const tickTitle = result === 'won' ? 'Won — click to change' : result === 'placed' ? 'Placed (each-way) — click to change' : result === 'lost' ? 'Lost — click to change' : 'Mark as won';
       return `<span class="chip ${resultClass}">
                 ${canTrackResults && !s.void ? `<button type="button" class="chip-tick" data-bet-id="${bet.id}" data-sel-index="${selIndex}" title="${tickTitle}">${tickIcon}</button>` : ''}
                 <b>${highlightMatch(s.selection, searchQuery)}</b> <span class="chip-market">— ${highlightMatch(s.market, searchQuery)}${s.competition ? ' · ' + highlightMatch(s.competition, searchQuery) : ''}${s.price ? ' @ ' + escapeHtml(s.price) : ''}${s.void ? ' · Void' : ''}</span>
@@ -962,13 +962,21 @@ function renderBetsList() {
       if (!targetBet) return;
       const sel = targetBet.selections[Number(btn.dataset.selIndex)];
       if (!sel) return;
-      const states = targetBet.betType === 'each-way' ? ['pending', 'won', 'placed'] : ['pending', 'won'];
+      const states = targetBet.betType === 'each-way' ? ['pending', 'won', 'placed', 'lost'] : ['pending', 'won', 'lost'];
       const nextIndex = (states.indexOf(sel.result || 'pending') + 1) % states.length;
       sel.result = states[nextIndex];
 
-      // If every selection has now been ticked won, the bet itself has won outright —
-      // settle it automatically so it moves under the right status filter straight away.
-      if (targetBet.selections.every(s => s.result === 'won')) {
+      // A single lost leg kills the whole accumulator outright, so settle the bet as lost the
+      // moment any selection is ticked lost — same idea as the all-won case below, just the
+      // opposite outcome. Checked first since one lost leg overrides any other result.
+      if (targetBet.selections.some(s => s.result === 'lost')) {
+        targetBet.status = 'lost';
+        if (targetBet.actualReturn === null || targetBet.actualReturn === undefined) {
+          targetBet.actualReturn = 0;
+        }
+      } else if (targetBet.selections.every(s => s.result === 'won')) {
+        // If every selection has now been ticked won, the bet itself has won outright —
+        // settle it automatically so it moves under the right status filter straight away.
         targetBet.status = 'won';
         targetBet.actualReturn = targetBet.potentialReturn;
       }
@@ -1590,8 +1598,10 @@ betForm.addEventListener('submit', (e) => {
         old.selection === s.selection && old.market === s.market && old.competition === s.competition
       );
       // Settling a bet as Won manually (rather than ticking each selection individually)
-      // should still colour every non-void selection the same way the tick would have.
-      const result = (status === 'won' && !s.void) ? 'won' : (priorMatch?.result || null);
+      // should still colour every non-void selection the same way the tick would have. And
+      // reverting a bet back to Open (e.g. undoing an accidental lost/won tick) should clear
+      // every selection's result too, rather than leaving a stale won/placed/lost mark behind.
+      const result = status === 'open' ? null : (status === 'won' && !s.void) ? 'won' : (priorMatch?.result || null);
       return {
         selection: s.selection,
         market: s.market,
