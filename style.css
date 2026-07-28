@@ -120,7 +120,7 @@ body {
 .stat-card-clickable.active .stat-label { color: var(--accent-text); }
 .stat-card .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
 .stat-card .stat-value { font-size: 19px; font-weight: 600; margin-top: 2px; }
-.stat-value.pos { color: var(--accent-text); }
+.stat-value.pos { color: var(--win-green); }
 .stat-value.neg { color: var(--red); }
 
 .filters-bar {
@@ -144,9 +144,10 @@ body {
   color: var(--text);
   font-size: 14px;
 }
-#search-input { flex: 1 1 200px; min-width: 150px; }
+#search-input { flex: 1 1 150px; min-width: 120px; }
 .filters-bar .autocomplete-wrap { flex: 0 0 auto; }
 .filters-bar .select-dropdown-proxy { padding: 7px 10px; }
+.filters-bar .autocomplete-wrap:has(#sort-by) { min-width: 210px; }
 .date-filter { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
 
 .bets-list { display: flex; flex-direction: column; gap: 10px; }
