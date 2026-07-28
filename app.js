@@ -891,7 +891,7 @@ function openStatDetailModal(metricKey) {
 function getTopOpenSelections(limit) {
   const counts = {};
   bets.filter(b => b.status === 'open').forEach(b => {
-    b.selections.forEach(s => {
+    (b.selections || []).forEach(s => {
       if (s.void || !s.selection) return;
       const key = `${s.selection}|||${s.market}|||${s.competition}`;
       if (!counts[key]) counts[key] = { selection: s.selection, market: s.market, competition: s.competition, count: 0 };
