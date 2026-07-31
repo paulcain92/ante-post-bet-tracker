@@ -366,6 +366,13 @@ body {
   color: var(--text-muted);
   border-bottom: 2px solid var(--border);
 }
+.pnl-period-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.pnl-period-header-inner .pnl-period-rename { flex: none; width: 80px; }
 .pnl-row-header {
   position: relative;
   text-align: left;
@@ -377,6 +384,20 @@ body {
   gap: 8px;
   white-space: nowrap;
 }
+.pnl-row-rename, .pnl-period-rename {
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 3px 5px;
+  box-sizing: border-box;
+}
+.pnl-row-rename { text-align: left; width: 140px; flex: none; }
+.pnl-period-rename { text-align: right; }
+.pnl-row-rename:hover, .pnl-period-rename:hover { border-color: var(--border); }
+.pnl-row-rename:focus, .pnl-period-rename:focus { outline: none; border-color: var(--accent); background: var(--bg); }
 .pnl-row-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .pnl-move-bookmaker {
   background: none;

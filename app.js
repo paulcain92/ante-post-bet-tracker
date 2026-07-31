@@ -1052,10 +1052,56 @@ function openTopSelectionsModal() {
   document.getElementById('top-selections-backdrop').hidden = false;
 }
 
+// Renaming moves the entered figures across too (values are keyed by name, not position),
+// so nothing is lost by editing a bookmaker/column title in place instead of deleting and
+// re-adding it.
+function renamePnlBookmaker(oldName, newName) {
+  newName = newName.trim();
+  if (!newName || newName === oldName) return false;
+  if (pnlTracker.bookmakers.includes(newName)) { alert(`"${newName}" already exists.`); return false; }
+  const idx = pnlTracker.bookmakers.indexOf(oldName);
+  if (idx === -1) return false;
+  pnlTracker.bookmakers[idx] = newName;
+  pnlTracker.periods.forEach(p => {
+    const oldKey = pnlKey(oldName, p);
+    if (oldKey in pnlTracker.values) {
+      pnlTracker.values[pnlKey(newName, p)] = pnlTracker.values[oldKey];
+      delete pnlTracker.values[oldKey];
+    }
+  });
+  return true;
+}
+
+function renamePnlPeriod(oldName, newName) {
+  newName = newName.trim();
+  if (!newName || newName === oldName) return false;
+  if (pnlTracker.periods.includes(newName)) { alert(`"${newName}" already exists.`); return false; }
+  const idx = pnlTracker.periods.indexOf(oldName);
+  if (idx === -1) return false;
+  pnlTracker.periods[idx] = newName;
+  pnlTracker.bookmakers.forEach(bm => {
+    const oldKey = pnlKey(bm, oldName);
+    if (oldKey in pnlTracker.values) {
+      pnlTracker.values[pnlKey(bm, newName)] = pnlTracker.values[oldKey];
+      delete pnlTracker.values[oldKey];
+    }
+  });
+  return true;
+}
+
+function pnlMoney(n) {
+  if (n === null || n === undefined || n === '' || isNaN(n)) return '—';
+  const rounded = Math.round(Number(n) * 100) / 100;
+  const fixed = Number.isInteger(rounded) ? Math.abs(rounded).toFixed(0) : Math.abs(rounded).toFixed(2);
+  const [intPart, decPart] = fixed.split('.');
+  const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return '£' + (rounded < 0 ? '-' : '') + withCommas + (decPart ? '.' + decPart : '');
+}
+
 function pnlCellHtml(val, extraClass) {
   if (val === null) return `<td class="pnl-cell ${extraClass || ''}">—</td>`;
   const cls = val > 0 ? 'pnl-pos' : val < 0 ? 'pnl-neg' : '';
-  return `<td class="pnl-cell ${cls} ${extraClass || ''}">${money(val)}</td>`;
+  return `<td class="pnl-cell ${cls} ${extraClass || ''}">${pnlMoney(val)}</td>`;
 }
 
 function renderPnlTable() {
@@ -1069,13 +1115,16 @@ function renderPnlTable() {
 
   let html = '<thead><tr><th class="pnl-corner"></th>';
   periods.forEach((p, i) => {
-    html += `<th class="pnl-period-header">${escapeHtml(p)}<button type="button" class="pnl-remove-period" data-index="${i}" title="Remove column">&times;</button></th>`;
+    html += `<th class="pnl-period-header"><div class="pnl-period-header-inner">
+      <input type="text" class="pnl-period-rename" data-index="${i}" value="${escapeHtml(p)}">
+      <button type="button" class="pnl-remove-period" data-index="${i}" title="Remove column">&times;</button>
+    </div></th>`;
   });
   html += '<th class="pnl-overall-header">Overall P/L</th></tr></thead><tbody>';
 
   bookmakers.forEach((bm, bi) => {
     html += `<tr><th class="pnl-row-header">
-      <span class="pnl-row-label">${escapeHtml(bm)}</span>
+      <input type="text" class="pnl-row-rename" data-index="${bi}" value="${escapeHtml(bm)}">
       <span class="pnl-row-actions">
         <button type="button" class="pnl-move-bookmaker" data-index="${bi}" data-dir="up" title="Move up" ${bi === 0 ? 'disabled' : ''}>▲</button>
         <button type="button" class="pnl-move-bookmaker" data-index="${bi}" data-dir="down" title="Move down" ${bi === bookmakers.length - 1 ? 'disabled' : ''}>▼</button>
@@ -1141,6 +1190,36 @@ function renderPnlTable() {
       savePnlTracker();
       renderPnlTable();
     });
+  });
+
+  table.querySelectorAll('.pnl-row-rename').forEach(input => {
+    const commit = () => {
+      const oldName = pnlTracker.bookmakers[Number(input.dataset.index)];
+      if (input.value.trim() === oldName) { input.value = oldName; return; }
+      if (renamePnlBookmaker(oldName, input.value)) {
+        savePnlTracker();
+        renderPnlTable();
+      } else {
+        input.value = oldName;
+      }
+    };
+    input.addEventListener('change', commit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+  });
+
+  table.querySelectorAll('.pnl-period-rename').forEach(input => {
+    const commit = () => {
+      const oldName = pnlTracker.periods[Number(input.dataset.index)];
+      if (input.value.trim() === oldName) { input.value = oldName; return; }
+      if (renamePnlPeriod(oldName, input.value)) {
+        savePnlTracker();
+        renderPnlTable();
+      } else {
+        input.value = oldName;
+      }
+    };
+    input.addEventListener('change', commit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
   });
 }
 
