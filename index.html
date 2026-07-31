@@ -13,6 +13,7 @@
   <div class="header-actions">
     <button id="btn-add" class="btn btn-primary">+ Add Bet</button>
     <button id="btn-top-selections" class="btn btn-ghost">🔝 Top Selections</button>
+    <button id="btn-pnl-tracker" class="btn btn-ghost">💷 P&amp;L Tracker</button>
     <button id="btn-export" class="btn btn-ghost">Export</button>
     <button id="btn-import" class="btn btn-ghost">Import</button>
     <input type="file" id="import-file" accept="application/json" hidden>
@@ -80,6 +81,26 @@
   </div>
 </div>
 
+<!-- P&L Tracker Modal -->
+<div id="pnl-tracker-backdrop" class="modal-backdrop" hidden>
+  <div class="modal modal-xl">
+    <div class="modal-header">
+      <h2>Profit / Loss Tracker</h2>
+      <button id="btn-close-pnl-tracker" class="btn-close">&times;</button>
+    </div>
+    <p class="pnl-tracker-note">A manual tracker for your betting account deposits and withdrawals.</p>
+    <div class="chart-wrap">
+      <table id="pnl-table" class="pnl-table"></table>
+    </div>
+    <div class="pnl-add-row">
+      <input type="text" id="pnl-new-bookmaker" placeholder="New bookmaker name">
+      <button type="button" id="btn-pnl-add-bookmaker" class="btn btn-ghost">+ Add bookmaker</button>
+      <input type="text" id="pnl-new-period" placeholder="New column, e.g. Aug-26">
+      <button type="button" id="btn-pnl-add-period" class="btn btn-ghost">+ Add column</button>
+    </div>
+  </div>
+</div>
+
 <!-- Add / Edit Bet Modal -->
 <div id="modal-backdrop" class="modal-backdrop" hidden>
   <div class="modal">
@@ -131,6 +152,10 @@
           <div class="money-field">
             <span class="money-prefix">£</span>
             <input type="number" id="f-win-stake" step="0.01" min="0" required>
+            <span class="money-spinner">
+              <button type="button" class="money-spin-up" data-target="f-win-stake" tabindex="-1" aria-label="Increase by £1">▲</button>
+              <button type="button" class="money-spin-down" data-target="f-win-stake" tabindex="-1" aria-label="Decrease by £1">▼</button>
+            </span>
           </div>
         </label>
         <label id="ew-stake-wrap" hidden>Each way stake
@@ -143,7 +168,7 @@
 
       <div class="checkbox-row">
         <input type="checkbox" id="f-manual-odds">
-        <span>I don't have prices for each selection — enter total odds manually</span>
+        <span>Don't have prices for each selection? Enter total odds manually below.</span>
       </div>
 
       <div class="form-row">
@@ -161,6 +186,10 @@
           <div class="money-field">
             <span class="money-prefix">£</span>
             <input type="number" id="f-actual-return" step="0.01" min="0">
+            <span class="money-spinner">
+              <button type="button" class="money-spin-up" data-target="f-actual-return" tabindex="-1" aria-label="Increase by £1">▲</button>
+              <button type="button" class="money-spin-down" data-target="f-actual-return" tabindex="-1" aria-label="Decrease by £1">▼</button>
+            </span>
           </div>
         </label>
       </div>

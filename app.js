@@ -7,6 +7,9 @@ const PAGE_SIZE = 20;
 // Set when the Add/Edit modal is opened from a Top Selections drill-down row, so closing,
 // saving, or deleting that bet drops back into the same drill-down list instead of just closing.
 let topSelectionsReturnContext = null;
+// True once the user has actually changed something in the open Add/Edit form — reset each
+// time the modal opens, so Cancel/X can warn before discarding in-progress work.
+let modalDirty = false;
 
 function loadBets() {
   try {
@@ -211,6 +214,53 @@ function saveOcrMemory() {
 }
 
 let ocrMemory = loadOcrMemory();
+
+// ---- P&L Tracker: a fully separate, manually-entered table (bookmaker x period) for bets
+// that never go through the accumulator tracker above (horse racing, small one-offs, etc).
+// Deliberately has no connection to `bets` — it's just its own little spreadsheet.
+
+const PNL_TRACKER_KEY = 'accaTracker.pnlTracker.v1';
+
+function loadPnlTracker() {
+  try {
+    const raw = localStorage.getItem(PNL_TRACKER_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return {
+      bookmakers: parsed?.bookmakers || [],
+      periods: parsed?.periods || [],
+      values: parsed?.values || {},
+    };
+  } catch (e) {
+    return { bookmakers: [], periods: [], values: {} };
+  }
+}
+
+function savePnlTracker() {
+  localStorage.setItem(PNL_TRACKER_KEY, JSON.stringify(pnlTracker));
+}
+
+let pnlTracker = loadPnlTracker();
+
+function pnlKey(bookmaker, period) {
+  return `${bookmaker}|||${period}`;
+}
+
+function pnlCellValue(bookmaker, period) {
+  const v = pnlTracker.values[pnlKey(bookmaker, period)];
+  return (v === undefined || v === null || v === '') ? null : Number(v);
+}
+
+function pnlRowTotal(bookmaker) {
+  return pnlTracker.periods.reduce((sum, p) => sum + (pnlCellValue(bookmaker, p) || 0), 0);
+}
+
+function pnlColumnTotal(period) {
+  return pnlTracker.bookmakers.reduce((sum, b) => sum + (pnlCellValue(b, period) || 0), 0);
+}
+
+function pnlGrandTotal() {
+  return pnlTracker.bookmakers.reduce((sum, b) => sum + pnlRowTotal(b), 0);
+}
 
 // Strips the personal account suffix (e.g. "Bet365 (KR)" -> "Bet365") so layout memory is
 // shared across accounts at the same bookmaker, since the slip layout depends on the brand.
@@ -962,7 +1012,7 @@ function renderTopSelectionsDrilldown(selection, market, competition) {
         <div class="drilldown-bet-info">
           <span class="date">${formatDate(b.datePlaced)}</span>
           <span class="bookmaker">${escapeHtml(b.bookmaker)}</span>
-          <span>${formatFoldLabel(b.selections.length)}${b.betType === 'each-way' ? ' · EW' : ''}</span>
+          <span>${formatFoldLabel(b.selections.length)}${b.betType === 'each-way' ? '<span class="ew-badge">EW</span>' : ''}</span>
         </div>
         <div class="drilldown-bet-figures">
           <span>Odds <b>${formatOdds(b.totalOdds, b.totalOddsRaw)}</b></span>
@@ -1000,6 +1050,103 @@ function renderTopSelectionsDrilldown(selection, market, competition) {
 function openTopSelectionsModal() {
   renderTopSelectionsRanking();
   document.getElementById('top-selections-backdrop').hidden = false;
+}
+
+function pnlCellHtml(val, extraClass) {
+  if (val === null) return `<td class="pnl-cell ${extraClass || ''}">—</td>`;
+  const cls = val > 0 ? 'pnl-pos' : val < 0 ? 'pnl-neg' : '';
+  return `<td class="pnl-cell ${cls} ${extraClass || ''}">${money(val)}</td>`;
+}
+
+function renderPnlTable() {
+  const { bookmakers, periods } = pnlTracker;
+  const table = document.getElementById('pnl-table');
+
+  if (bookmakers.length === 0 && periods.length === 0) {
+    table.innerHTML = '<caption class="chart-empty">Add a bookmaker and a column below to get started.</caption>';
+    return;
+  }
+
+  let html = '<thead><tr><th class="pnl-corner"></th>';
+  periods.forEach((p, i) => {
+    html += `<th class="pnl-period-header">${escapeHtml(p)}<button type="button" class="pnl-remove-period" data-index="${i}" title="Remove column">&times;</button></th>`;
+  });
+  html += '<th class="pnl-overall-header">Overall P/L</th></tr></thead><tbody>';
+
+  bookmakers.forEach((bm, bi) => {
+    html += `<tr><th class="pnl-row-header">
+      <span class="pnl-row-label">${escapeHtml(bm)}</span>
+      <span class="pnl-row-actions">
+        <button type="button" class="pnl-move-bookmaker" data-index="${bi}" data-dir="up" title="Move up" ${bi === 0 ? 'disabled' : ''}>▲</button>
+        <button type="button" class="pnl-move-bookmaker" data-index="${bi}" data-dir="down" title="Move down" ${bi === bookmakers.length - 1 ? 'disabled' : ''}>▼</button>
+        <button type="button" class="pnl-remove-bookmaker" data-index="${bi}" title="Remove row">&times;</button>
+      </span>
+    </th>`;
+    periods.forEach(p => {
+      const val = pnlCellValue(bm, p);
+      html += `<td class="pnl-input-cell"><input type="number" step="0.01" class="pnl-input" data-bookmaker="${escapeHtml(bm)}" data-period="${escapeHtml(p)}" value="${val === null ? '' : val}"></td>`;
+    });
+    html += pnlCellHtml(pnlRowTotal(bm), 'pnl-overall-cell');
+    html += '</tr>';
+  });
+
+  html += `<tr class="pnl-totals-row"><th>Overall P/L</th>`;
+  periods.forEach(p => { html += pnlCellHtml(pnlColumnTotal(p)); });
+  html += pnlCellHtml(pnlGrandTotal(), 'pnl-overall-cell');
+  html += '</tr></tbody>';
+
+  table.innerHTML = html;
+
+  table.querySelectorAll('.pnl-input').forEach(input => {
+    input.addEventListener('change', () => {
+      const key = pnlKey(input.dataset.bookmaker, input.dataset.period);
+      if (input.value === '') {
+        delete pnlTracker.values[key];
+      } else {
+        pnlTracker.values[key] = Number(input.value);
+      }
+      savePnlTracker();
+      renderPnlTable();
+    });
+  });
+
+  table.querySelectorAll('.pnl-move-bookmaker').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = Number(btn.dataset.index);
+      const j = i + (btn.dataset.dir === 'up' ? -1 : 1);
+      if (j < 0 || j >= pnlTracker.bookmakers.length) return;
+      [pnlTracker.bookmakers[i], pnlTracker.bookmakers[j]] = [pnlTracker.bookmakers[j], pnlTracker.bookmakers[i]];
+      savePnlTracker();
+      renderPnlTable();
+    });
+  });
+
+  table.querySelectorAll('.pnl-remove-bookmaker').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const bm = pnlTracker.bookmakers[Number(btn.dataset.index)];
+      if (!confirm(`Remove "${bm}" and all its entered figures?`)) return;
+      pnlTracker.bookmakers.splice(Number(btn.dataset.index), 1);
+      pnlTracker.periods.forEach(p => delete pnlTracker.values[pnlKey(bm, p)]);
+      savePnlTracker();
+      renderPnlTable();
+    });
+  });
+
+  table.querySelectorAll('.pnl-remove-period').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = pnlTracker.periods[Number(btn.dataset.index)];
+      if (!confirm(`Remove the "${p}" column and all its entered figures?`)) return;
+      pnlTracker.periods.splice(Number(btn.dataset.index), 1);
+      pnlTracker.bookmakers.forEach(bm => delete pnlTracker.values[pnlKey(bm, p)]);
+      savePnlTracker();
+      renderPnlTable();
+    });
+  });
+}
+
+function openPnlTrackerModal() {
+  renderPnlTable();
+  document.getElementById('pnl-tracker-backdrop').hidden = false;
 }
 
 function renderBetsList() {
@@ -1054,7 +1201,7 @@ function renderBetsList() {
             <span class="status-badge status-${bet.status}">${bet.status.replace('-', ' ')}</span>
           </div>
           <div class="bet-figures">
-            <span>${formatFoldLabel(bet.selections.length)}${bet.betType === 'each-way' ? ' · EW' : ''}</span>
+            <span>${formatFoldLabel(bet.selections.length)}${bet.betType === 'each-way' ? '<span class="ew-badge">EW</span>' : ''}</span>
             <span>Odds <b>${formatOdds(bet.totalOdds, bet.totalOddsRaw)}</b></span>
             <span>Stake <b>${money(stake)}</b></span>
             ${bet.status !== 'won' ? `<span>Potential <b>${money(bet.potentialReturn)}</b></span>` : ''}
@@ -1227,6 +1374,7 @@ function openModal(bet, options = {}) {
     updateOddsMode();
   }
 
+  modalDirty = false;
   modalBackdrop.hidden = false;
 }
 
@@ -1239,6 +1387,40 @@ function closeModal() {
     document.getElementById('top-selections-backdrop').hidden = false;
   }
 }
+
+// Cancel/X/Back should warn before discarding in-progress work — saving or deleting calls
+// closeModal() directly instead, bypassing this, since there's nothing to lose at that point.
+function closeModalWithConfirm() {
+  if (modalDirty && !confirm('Are you sure you wish to exit? Any unsaved changes will be lost.')) return;
+  closeModal();
+}
+
+betForm.addEventListener('input', () => { modalDirty = true; });
+betForm.addEventListener('change', () => { modalDirty = true; });
+
+// Win stake / actual return spin by whole £1 rather than the native default of a single
+// penny — the native spinner can't do this itself without also blocking decimal typing
+// (e.g. £4.50), so this replaces it with custom buttons and matching keyboard arrows.
+function stepMoneyField(field, direction) {
+  const current = field.value === '' ? 0 : Number(field.value);
+  const next = Math.max(0, direction === 'up' ? current + 1 : current - 1);
+  field.value = next;
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+}
+betForm.addEventListener('click', (e) => {
+  const btn = e.target.closest('.money-spin-up, .money-spin-down');
+  if (!btn) return;
+  e.preventDefault();
+  const field = document.getElementById(btn.dataset.target);
+  stepMoneyField(field, btn.classList.contains('money-spin-up') ? 'up' : 'down');
+  field.focus();
+});
+betForm.addEventListener('keydown', (e) => {
+  if (!e.target.matches('#f-win-stake, #f-actual-return')) return;
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+  e.preventDefault();
+  stepMoneyField(e.target, e.key === 'ArrowUp' ? 'up' : 'down');
+});
 
 function updateEwFieldsVisibility() {
   const isEw = document.getElementById('f-bet-type').value === 'each-way';
@@ -1276,7 +1458,6 @@ function updateOddsMode() {
       el.querySelector('.sel-ew-fraction').value = '';
       el.querySelector('.sel-ew-places').value = '';
       el.querySelector('.places-field').hidden = false;
-      el.querySelector('.places-suffix').hidden = true;
     }
   });
 
@@ -1361,20 +1542,16 @@ function addSelectionRow(sel, ocrMeta) {
         <input type="checkbox" class="sel-void" ${sel?.void ? 'checked' : ''}> Void
       </label>
       <div class="ew-fields" ${isEw && !manual ? '' : 'hidden'}>
-        <input type="text" placeholder="EW fraction" class="sel-ew-fraction" value="${escapeHtml(sel?.ewFraction)}" readonly>
+        <input type="text" placeholder="Place Odds" class="sel-ew-fraction" value="${escapeHtml(sel?.ewFraction)}" readonly>
         <div class="places-field" ${isWinOnlyFraction(sel?.ewFraction) ? 'hidden' : ''}>
-          <input type="number" placeholder="Places" class="sel-ew-places" min="1" step="1" value="${escapeHtml(sel?.ewPlaces)}">
-          <span class="places-suffix" ${sel?.ewPlaces ? '' : 'hidden'}>places</span>
-          <span class="places-spinner">
-            <button type="button" class="places-spin-up" tabindex="-1" aria-label="Decrease places">▲</button>
-            <button type="button" class="places-spin-down" tabindex="-1" aria-label="Increase places">▼</button>
-          </span>
+          <input type="text" placeholder="Places" class="sel-ew-places" value="${escapeHtml(sel?.ewPlaces)}" readonly>
         </div>
       </div>
     </div>
   `;
   block.querySelector('.selection-row-top button').addEventListener('click', () => {
     if (selectionsEditor.children.length > 1) {
+      modalDirty = true;
       block.remove();
       recalcModalTotals();
     }
@@ -1393,6 +1570,7 @@ function addSelectionRow(sel, ocrMeta) {
   attachCompetitionAutocomplete(block.querySelector('.sel-competition'));
   attachAutocomplete(block.querySelector('.sel-market'), () => getFrequentTerms('market', 10));
   attachFixedDropdown(block.querySelector('.sel-ew-fraction'), EW_FRACTION_OPTIONS);
+  attachFixedDropdown(block.querySelector('.sel-ew-places'), PLACES_OPTIONS);
   selectionsEditor.appendChild(block);
 }
 
@@ -1403,7 +1581,8 @@ function attachCompetitionAutocomplete(input) {
   attachAutocomplete(input, getCompetitionSuggestions);
 }
 
-const EW_FRACTION_OPTIONS = ['Win only', '1/5', '1/4', '1/3', '1/2'];
+const EW_FRACTION_OPTIONS = ['1/1', '1/2', '1/3', '1/4', '1/5'];
+const PLACES_OPTIONS = ['1', '2', '3', '4', '5'];
 
 // Read-only themed dropdown for a small fixed set of options (EW fraction) — reuses the exact
 // same autocomplete-list/autocomplete-item styling as the search-driven fields (selection,
@@ -1887,38 +2066,8 @@ selectionsEditor.addEventListener('input', (e) => {
     const placesField = e.target.closest('.ew-fields').querySelector('.places-field');
     const winOnly = isWinOnlyFraction(e.target.value);
     placesField.hidden = winOnly;
-    if (winOnly) {
-      const placesInput = placesField.querySelector('.sel-ew-places');
-      placesInput.value = '';
-      placesField.querySelector('.places-suffix').hidden = true;
-    }
+    if (winOnly) placesField.querySelector('.sel-ew-places').value = '';
   }
-
-  if (e.target.matches('.sel-ew-places')) {
-    e.target.closest('.places-field').querySelector('.places-suffix').hidden = e.target.value.trim() === '';
-  }
-});
-function stepPlacesField(field, direction) {
-  // Places field has inverted spin direction: down increments (1, 2, 3...), up decrements.
-  const min = Number(field.min) || 1;
-  const current = field.value === '' ? min - 1 : Number(field.value);
-  const next = direction === 'down' ? current + 1 : Math.max(min, current - 1);
-  field.value = next;
-  field.dispatchEvent(new Event('input', { bubbles: true }));
-}
-selectionsEditor.addEventListener('keydown', (e) => {
-  if (!e.target.matches('.sel-ew-places')) return;
-  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-  e.preventDefault();
-  stepPlacesField(e.target, e.key === 'ArrowDown' ? 'down' : 'up');
-});
-selectionsEditor.addEventListener('click', (e) => {
-  const spinBtn = e.target.closest('.places-spin-up, .places-spin-down');
-  if (!spinBtn) return;
-  e.preventDefault();
-  const field = spinBtn.closest('.places-field').querySelector('.sel-ew-places');
-  stepPlacesField(field, spinBtn.classList.contains('places-spin-down') ? 'down' : 'up');
-  field.focus();
 });
 // Covers typing a selection name out in full and tabbing/clicking away, rather than picking
 // it from the dropdown (which triggers the same auto-fill via attachAutocomplete's onAccept).
@@ -1963,10 +2112,42 @@ document.getElementById('btn-top-selections-back').addEventListener('click', ren
 document.getElementById('btn-close-top-selections').addEventListener('click', () => {
   document.getElementById('top-selections-backdrop').hidden = true;
 });
-document.getElementById('btn-close-modal').addEventListener('click', closeModal);
-document.getElementById('btn-modal-back').addEventListener('click', closeModal);
-document.getElementById('btn-cancel').addEventListener('click', closeModal);
-document.getElementById('btn-add-selection').addEventListener('click', () => { addSelectionRow(); recalcModalTotals(); });
+
+document.getElementById('btn-pnl-tracker').addEventListener('click', openPnlTrackerModal);
+document.getElementById('btn-close-pnl-tracker').addEventListener('click', () => {
+  document.getElementById('pnl-tracker-backdrop').hidden = true;
+});
+document.getElementById('btn-pnl-add-bookmaker').addEventListener('click', () => {
+  const input = document.getElementById('pnl-new-bookmaker');
+  const name = input.value.trim();
+  if (!name) { alert('Enter a bookmaker name first.'); input.focus(); return; }
+  if (pnlTracker.bookmakers.includes(name)) { alert(`"${name}" is already in the table.`); input.focus(); return; }
+  pnlTracker.bookmakers.push(name);
+  savePnlTracker();
+  input.value = '';
+  renderPnlTable();
+});
+document.getElementById('pnl-new-bookmaker').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-pnl-add-bookmaker').click(); }
+});
+document.getElementById('btn-pnl-add-period').addEventListener('click', () => {
+  const input = document.getElementById('pnl-new-period');
+  const name = input.value.trim();
+  if (!name) { alert('Enter a column name first.'); input.focus(); return; }
+  if (pnlTracker.periods.includes(name)) { alert(`"${name}" is already in the table.`); input.focus(); return; }
+  pnlTracker.periods.push(name);
+  savePnlTracker();
+  input.value = '';
+  renderPnlTable();
+});
+document.getElementById('pnl-new-period').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-pnl-add-period').click(); }
+});
+
+document.getElementById('btn-close-modal').addEventListener('click', closeModalWithConfirm);
+document.getElementById('btn-modal-back').addEventListener('click', closeModalWithConfirm);
+document.getElementById('btn-cancel').addEventListener('click', closeModalWithConfirm);
+document.getElementById('btn-add-selection').addEventListener('click', () => { modalDirty = true; addSelectionRow(); recalcModalTotals(); });
 
 document.getElementById('btn-delete-bet').addEventListener('click', () => {
   const id = document.getElementById('bet-id').value;

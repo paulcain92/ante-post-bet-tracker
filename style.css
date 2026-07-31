@@ -186,6 +186,18 @@ body {
 .status-lost { background: var(--red); }
 .status-cash-out { background: var(--orange); }
 
+.ew-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--place-green);
+  color: var(--on-place-green);
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
 .bet-actions { display: flex; gap: 6px; }
 .bet-actions button {
   background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 15px;
@@ -275,6 +287,7 @@ body {
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .modal-header h2 { margin: 0; font-size: 19px; }
 .modal-wide { max-width: 900px; }
+.modal-xl { max-width: 1200px; }
 .modal-header-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .modal-header-title h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn-back {
@@ -342,6 +355,84 @@ body {
   font-size: 12.5px;
 }
 .btn-drilldown-edit:hover { border-color: var(--accent); color: var(--accent-text); }
+
+.pnl-tracker-note { font-size: 12.5px; color: var(--text-muted); margin: 0 0 14px; }
+.pnl-table { border-collapse: collapse; width: 100%; min-width: 600px; font-size: 13px; }
+.pnl-table th, .pnl-table td { padding: 6px 8px; text-align: right; white-space: nowrap; }
+.pnl-corner { min-width: 120px; }
+.pnl-period-header, .pnl-overall-header {
+  position: relative;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border);
+}
+.pnl-row-header {
+  position: relative;
+  text-align: left;
+  font-weight: 600;
+  border-right: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+}
+.pnl-row-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.pnl-move-bookmaker {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 2px;
+  vertical-align: middle;
+}
+.pnl-move-bookmaker:hover:not(:disabled) { color: var(--accent-text); }
+.pnl-move-bookmaker:disabled { opacity: 0.3; cursor: default; }
+.pnl-remove-bookmaker, .pnl-remove-period {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  margin-left: 6px;
+  padding: 0;
+  vertical-align: middle;
+}
+.pnl-remove-bookmaker:hover, .pnl-remove-period:hover { color: var(--red); }
+.pnl-input-cell { padding: 2px 4px; }
+.pnl-input {
+  width: 90px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  text-align: right;
+  -moz-appearance: textfield;
+}
+.pnl-input::-webkit-outer-spin-button,
+.pnl-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.pnl-cell { font-weight: 600; }
+.pnl-cell.pnl-pos { background: var(--win-green); color: var(--on-win-green); border-radius: 6px; }
+.pnl-cell.pnl-neg { background: var(--red); color: #fff; border-radius: 6px; }
+.pnl-overall-cell { border-left: 2px solid var(--border); }
+.pnl-totals-row th, .pnl-totals-row td { border-top: 2px solid var(--border); font-weight: 700; }
+.pnl-add-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; align-items: center; }
+.pnl-add-row input {
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13.5px;
+  flex: 1 1 160px;
+  min-width: 120px;
+}
 
 .checkbox-row {
   display: flex;
@@ -418,6 +509,15 @@ body {
   width: 100%;
   padding-left: 22px;
 }
+.money-field input[type="number"] {
+  padding-right: 28px;
+  -moz-appearance: textfield;
+}
+.money-field input[type="number"]::-webkit-outer-spin-button,
+.money-field input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 .money-prefix {
   position: absolute;
   left: 10px;
@@ -427,6 +527,34 @@ body {
   font-size: 14px;
   pointer-events: none;
 }
+.money-spinner {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  bottom: 4px;
+  width: 20px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.money-spinner button {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 8px;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.money-spin-up { border-bottom: 1px solid var(--border); }
+.money-spinner button:hover { background: var(--accent); color: var(--on-accent); }
 .field-note {
   display: block;
   font-size: 11.5px;
@@ -524,62 +652,8 @@ h3 { font-size: 14px; margin: 14px 0 8px; color: var(--text-muted); text-transfo
   gap: 8px;
   flex: 1;
 }
-.places-field {
-  position: relative;
-  flex: 1;
-}
-.places-field input {
-  width: 100%;
-  padding-right: 72px;
-  -moz-appearance: textfield;
-}
-.places-field input::-webkit-outer-spin-button,
-.places-field input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.places-suffix {
-  position: absolute;
-  right: 32px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-muted);
-  font-size: 12px;
-  pointer-events: none;
-}
-.places-spinner {
-  position: absolute;
-  right: 6px;
-  top: 4px;
-  bottom: 4px;
-  width: 20px;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.places-spinner button {
-  flex: 1;
-  min-height: 0;
-  border: none;
-  background: var(--bg);
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 8px;
-  line-height: 1;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.places-spinner button.places-spin-up {
-  border-bottom: 1px solid var(--border);
-}
-.places-spinner button:hover {
-  background: var(--accent);
-  color: var(--on-accent);
-}
+.places-field { flex: 1; }
+.sel-ew-places { cursor: pointer; }
 .void-toggle {
   display: flex;
   align-items: center;
