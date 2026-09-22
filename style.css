@@ -144,11 +144,21 @@ body {
   color: var(--text);
   font-size: 14px;
 }
-#search-input { flex: 1 1 150px; min-width: 120px; }
+#search-input { flex: 1 1 200px; min-width: 120px; }
 .filters-bar .autocomplete-wrap { flex: 0 0 auto; }
 .filters-bar .select-dropdown-proxy { padding: 7px 10px; }
 .filters-bar .autocomplete-wrap:has(#sort-by) { min-width: 210px; }
 .date-filter { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin: 0 8px;
+}
+.filter-checkbox input { cursor: pointer; }
 
 .bets-list { display: flex; flex-direction: column; gap: 10px; }
 

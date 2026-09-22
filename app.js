@@ -272,12 +272,14 @@ function betMatchesFilters(bet, { includeStatus = true } = {}) {
   const status = document.getElementById('filter-status').value;
   const bookmaker = document.getElementById('filter-bookmaker').value;
   const betType = document.getElementById('filter-bet-type').value;
+  const freeBetOnly = document.getElementById('filter-free-bet').checked;
   const dateFrom = document.getElementById('filter-date-from').value;
   const dateTo = document.getElementById('filter-date-to').value;
 
   if (includeStatus && status && bet.status !== status) return false;
   if (bookmaker && bet.bookmaker !== bookmaker) return false;
   if (betType && bet.betType !== betType) return false;
+  if (freeBetOnly && !bet.freeBet) return false;
   if (dateFrom && bet.datePlaced < dateFrom) return false;
   if (dateTo && bet.datePlaced > dateTo) return false;
 
@@ -1949,7 +1951,7 @@ document.getElementById('btn-delete-bet').addEventListener('click', () => {
 
 // ---------- Filters ----------
 
-['search-input', 'filter-status', 'filter-bookmaker', 'filter-bet-type', 'filter-date-from', 'filter-date-to', 'sort-by'].forEach(id => {
+['search-input', 'filter-status', 'filter-bookmaker', 'filter-bet-type', 'filter-free-bet', 'filter-date-from', 'filter-date-to', 'sort-by'].forEach(id => {
   document.getElementById(id).addEventListener('input', () => { currentPage = 1; render(); });
   document.getElementById(id).addEventListener('change', () => { currentPage = 1; render(); });
 });
@@ -1959,6 +1961,7 @@ document.getElementById('btn-clear-filters').addEventListener('click', () => {
   document.getElementById('filter-status').value = '';
   document.getElementById('filter-bookmaker').value = '';
   document.getElementById('filter-bet-type').value = '';
+  document.getElementById('filter-free-bet').checked = false;
   document.getElementById('filter-date-from').value = '';
   document.getElementById('filter-date-to').value = '';
   document.getElementById('sort-by').value = 'date-desc';
