@@ -555,7 +555,13 @@ function renderHorizontalBarChart(container, groups, color) {
     return;
   }
 
-  const sorted = [...groups].sort((a, b) => b.value - a.value);
+  let sorted = [...groups].sort((a, b) => b.value - a.value);
+  const TOP_N = 7;
+  if (sorted.length > TOP_N) {
+    const top = sorted.slice(0, TOP_N);
+    const otherValue = sorted.slice(TOP_N).reduce((sum, g) => sum + g.value, 0);
+    sorted = [...top, { label: 'Other', value: otherValue }];
+  }
 
   const width = 820;
   const marginLeft = 140, marginRight = 70, marginTop = 10, marginBottom = 28;
