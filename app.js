@@ -546,6 +546,60 @@ function renderSingleBarChart(container, groups, color) {
   container.innerHTML = svg;
 }
 
+// Horizontal variant of the bar chart above — used for "by bookmaker" breakdowns where the
+// category count can grow unbounded and vertical bars quickly run out of label room. Each
+// bookmaker gets its own row, sorted by value descending so the biggest are easiest to scan.
+function renderHorizontalBarChart(container, groups, color) {
+  if (groups.length === 0) {
+    container.innerHTML = '<p class="chart-empty">No data yet.</p>';
+    return;
+  }
+
+  const sorted = [...groups].sort((a, b) => b.value - a.value);
+
+  const width = 820;
+  const marginLeft = 140, marginRight = 70, marginTop = 10, marginBottom = 28;
+  const rowHeight = 30;
+  const plotWidth = width - marginLeft - marginRight;
+  const plotHeight = sorted.length * rowHeight;
+  const height = marginTop + plotHeight + marginBottom;
+
+  const dataMax = Math.max(0, ...sorted.map(g => g.value));
+  const dataMin = Math.min(0, ...sorted.map(g => g.value));
+  const ticks = computeNiceTicks(dataMin, dataMax, 4);
+  const minVal = ticks[0];
+  const maxVal = ticks[ticks.length - 1];
+  const range = (maxVal - minVal) || 1;
+  const xScale = (v) => marginLeft + ((v - minVal) / range) * plotWidth;
+
+  let svg = `<svg viewBox="0 0 ${width} ${height}" class="bar-chart bar-chart-horizontal" style="aspect-ratio: ${width} / ${height};" preserveAspectRatio="xMinYMin meet">`;
+
+  ticks.forEach(v => {
+    const x = xScale(v);
+    svg += `<line x1="${x.toFixed(1)}" y1="${marginTop}" x2="${x.toFixed(1)}" y2="${marginTop + plotHeight}" class="${v === 0 ? 'chart-axis-line' : 'chart-gridline'}" />`;
+    svg += `<text x="${x.toFixed(1)}" y="${marginTop + plotHeight + 18}" class="chart-axis-label" text-anchor="middle">${money(v)}</text>`;
+  });
+
+  sorted.forEach((g, i) => {
+    const rowY = marginTop + i * rowHeight;
+    const barY = rowY + rowHeight * 0.2;
+    const barH = rowHeight * 0.6;
+    const barX1 = xScale(Math.max(0, g.value));
+    const barX2 = xScale(Math.min(0, g.value));
+    const barLeft = Math.min(barX1, barX2);
+    const barW = Math.max(1, Math.abs(barX2 - barX1));
+    const barColor = typeof color === 'function' ? color(g.value) : color;
+    svg += `<rect x="${barLeft.toFixed(1)}" y="${barY.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" fill="${barColor}"><title>${escapeHtml(g.label)}: ${money(g.value)}</title></rect>`;
+    const labelY = (rowY + rowHeight / 2 + 4).toFixed(1);
+    svg += `<text x="${marginLeft - 8}" y="${labelY}" class="chart-axis-label" text-anchor="end">${escapeHtml(g.label)}</text>`;
+    const valueX = g.value >= 0 ? barX1 + 6 : barX1 - 6;
+    svg += `<text x="${valueX.toFixed(1)}" y="${labelY}" class="chart-value-label" text-anchor="${g.value >= 0 ? 'start' : 'end'}">${money(g.value)}</text>`;
+  });
+
+  svg += `</svg>`;
+  container.innerHTML = svg;
+}
+
 // Line chart of cumulative Total P&L over time, plotted against the same nice-rounded Y axis
 // as the bar charts.
 function renderLineChart(container, series) {
@@ -614,7 +668,7 @@ function openStatDetailModal(metricKey) {
       </div>
     `;
     renderLineChart(document.getElementById('pl-line-chart'), getPnlLineSeries());
-    renderSingleBarChart(document.getElementById('pl-bookmaker-chart'), getBookmakerMetricBreakdown('pl'), metric.color);
+    renderHorizontalBarChart(document.getElementById('pl-bookmaker-chart'), getBookmakerMetricBreakdown('pl'), metric.color);
   } else {
     body.innerHTML = `
       <div class="chart-block">
@@ -627,7 +681,7 @@ function openStatDetailModal(metricKey) {
       </div>
     `;
     renderSingleBarChart(document.getElementById('stat-detail-monthly-chart'), getMonthlyMetricBreakdown(metricKey), metric.color);
-    renderSingleBarChart(document.getElementById('stat-detail-bookmaker-chart'), getBookmakerMetricBreakdown(metricKey), metric.color);
+    renderHorizontalBarChart(document.getElementById('stat-detail-bookmaker-chart'), getBookmakerMetricBreakdown(metricKey), metric.color);
   }
 
   document.getElementById('stat-detail-backdrop').hidden = false;
