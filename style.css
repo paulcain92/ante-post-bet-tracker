@@ -198,6 +198,30 @@ body {
   vertical-align: 1px;
 }
 
+.boost-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--on-accent);
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+.free-bet-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--blue);
+  color: #ffffff;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
 .bet-actions { display: flex; gap: 6px; }
 .bet-actions button {
   background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 15px;
@@ -464,36 +488,30 @@ body {
   margin-bottom: 12px;
 }
 .checkbox-row input { cursor: pointer; }
-
-.scan-block {
-  background: var(--bg);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-  margin-bottom: 14px;
+.boost-percent-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
 }
-#scan-status {
-  display: inline-block;
-  margin-left: 10px;
-  margin-top: 0;
-}
-#scan-text-wrap {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-#scan-text-wrap summary { cursor: pointer; }
-#scan-text {
-  white-space: pre-wrap;
-  max-height: 160px;
-  overflow-y: auto;
-  background: var(--surface);
+.boost-percent-field input {
+  width: 56px;
+  padding: 5px 6px;
+  border-radius: 6px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin-top: 6px;
-  font-size: 11.5px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
 }
+.boost-percent-suffix { font-size: 13px; color: var(--text-muted); }
+.free-bet-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 18px;
+  cursor: pointer;
+}
+.free-bet-toggle input { cursor: pointer; }
 
 .form-row {
   display: flex;

@@ -114,16 +114,6 @@
     <form id="bet-form">
       <input type="hidden" id="bet-id">
 
-      <div class="scan-block">
-        <button type="button" id="btn-scan" class="btn btn-ghost">📷 Scan bookmaker screenshot</button>
-        <input type="file" id="f-screenshot" accept="image/*" hidden>
-        <span id="scan-status" class="field-note" hidden></span>
-        <details id="scan-text-wrap" hidden>
-          <summary>Show extracted text</summary>
-          <pre id="scan-text"></pre>
-        </details>
-      </div>
-
       <div class="form-row">
         <label>Date placed
           <input type="date" id="f-date" required>
@@ -171,6 +161,19 @@
         <span>Don't have prices for each selection? Enter total odds manually below.</span>
       </div>
 
+      <div class="checkbox-row">
+        <input type="checkbox" id="f-boost-applied">
+        <span>Acca boost?</span>
+        <div class="boost-percent-field" id="boost-percent-wrap" hidden>
+          <input type="number" id="f-boost-percent" step="1" min="1" max="100" placeholder="10">
+          <span class="boost-percent-suffix">%</span>
+        </div>
+        <label class="free-bet-toggle">
+          <input type="checkbox" id="f-free-bet">
+          Free bet
+        </label>
+      </div>
+
       <div class="form-row">
         <label>Total odds
           <input type="text" id="f-odds" readonly placeholder="—">
@@ -181,6 +184,7 @@
             <span class="money-prefix">£</span>
             <input type="text" id="f-potential-return" readonly placeholder="—">
           </div>
+          <span id="f-boost-note" class="field-note" hidden></span>
         </label>
         <label>Actual return
           <div class="money-field">
@@ -211,7 +215,6 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

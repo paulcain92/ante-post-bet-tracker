@@ -33,6 +33,12 @@ function totalStake(bet) {
   return (Number(bet.winStake) || 0) + (bet.betType === 'each-way' ? (Number(bet.eachWayStake) || 0) : 0);
 }
 
+// A free bet's stake was never the user's own money — it shouldn't count as money at risk
+// for P&L purposes, even though the bookmaker's own slip still displays it as "Stake".
+function stakeCost(bet) {
+  return bet.freeBet ? 0 : totalStake(bet);
+}
+
 function money(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return '—';
   const rounded = Math.round(Number(n) * 100) / 100;
@@ -142,78 +148,24 @@ function computePotentialReturn(totals, betType, winStake, ewStake) {
   return winStake * totals.winDecimal;
 }
 
-// ---------- Screenshot scan (OCR best-effort autofill) ----------
-
-const KNOWN_BOOKMAKERS = ['Bet365', 'Sky Bet', 'Ladbrokes', 'William Hill', 'AK Bets', 'Betano', 'Betway', 'PricedUp', 'Lottoland'];
-
-function findBookmaker(text) {
-  for (const name of KNOWN_BOOKMAKERS) {
-    if (new RegExp(name.replace(/\s+/g, '\\s*'), 'i').test(text)) return name;
-  }
-  return null;
+// Bookmaker acca boosts apply to the winnings (profit) only, not the stake — e.g. a 20%
+// boost on a £2 stake returning £127.66 boosts the £125.66 profit by 20% (+£25.13),
+// not the full £127.66 return.
+function applyBoost(baseReturn, stake, boostPercent) {
+  if (isNaN(baseReturn) || !boostPercent || boostPercent <= 0) return baseReturn;
+  const winnings = baseReturn - stake;
+  if (winnings <= 0) return baseReturn;
+  return baseReturn + winnings * (boostPercent / 100);
 }
 
-function isEachWay(text) {
-  return /each\s*way|e\/?w\b/i.test(text);
+// Free bets don't pay the stake back as part of the return (only the winnings), since it
+// was never the user's own money — so it's excluded before any boost is applied on top.
+// Returns both the pre-boost figure (for the "incl. £X boost" note) and the final one.
+function computeFinalReturn(baseReturn, stake, freeBet, boostPercent) {
+  const rawReturn = freeBet && !isNaN(baseReturn) ? baseReturn - stake : baseReturn;
+  const stakeForBoost = freeBet ? 0 : stake;
+  return { rawReturn, finalReturn: applyBoost(rawReturn, stakeForBoost, boostPercent) };
 }
-
-function findStakes(text) {
-  let winStake = null, ewStake = null;
-  const ewMatch = text.match(/each\s*way\s*stake[^\d£]{0,12}£?\s*([\d]+(?:\.\d{1,2})?)/i);
-  if (ewMatch) ewStake = parseFloat(ewMatch[1]);
-
-  const winMatch = text.match(/(?:win\s*stake|total\s*stake)[^\d£]{0,12}£?\s*([\d]+(?:\.\d{1,2})?)/i)
-    || text.match(/\bstake[^\d£]{0,12}£?\s*([\d]+(?:\.\d{1,2})?)/i);
-  if (winMatch) winStake = parseFloat(winMatch[1]);
-
-  return { winStake, ewStake };
-}
-
-function findTotalOdds(text) {
-  const m = text.match(/(?:total|combined)\s*odds[^\d]{0,12}(\d+\/\d+|\d+\.\d{1,2})/i);
-  return m ? m[1] : null;
-}
-
-const EACH_WAY_TERMS_RE = /(\d{1,2}\/\d{1,2})\s*(?:odds)?[\s,-]{0,6}(\d{1,2})\s*places?/i;
-
-function findEachWayTerms(text) {
-  const m = text.match(EACH_WAY_TERMS_RE);
-  return m ? { fraction: m[1], places: m[2] } : null;
-}
-
-// ---- OCR memory: learns line-layout patterns and text corrections per bookmaker,
-// and grows more familiar with the user's own selections/markets/competitions over time.
-
-const OCR_MEMORY_KEY = 'accaTracker.ocrMemory.v1';
-
-function loadOcrMemory() {
-  try {
-    const raw = localStorage.getItem(OCR_MEMORY_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    const rawCorrections = parsed?.corrections || {};
-    const corrections = {};
-    Object.keys(rawCorrections).forEach(bmKey => {
-      const entry = rawCorrections[bmKey] || {};
-      // Migrate the old flat { rawSelection: finalValue } shape (selection corrections only)
-      // into the newer { selections: {...}, markets: {...} } shape.
-      corrections[bmKey] = (entry.selections || entry.markets)
-        ? { selections: entry.selections || {}, markets: entry.markets || {} }
-        : { selections: entry, markets: {} };
-    });
-    return {
-      corrections,
-      lineOffsetStats: parsed?.lineOffsetStats || {},
-    };
-  } catch (e) {
-    return { corrections: {}, lineOffsetStats: {} };
-  }
-}
-
-function saveOcrMemory() {
-  localStorage.setItem(OCR_MEMORY_KEY, JSON.stringify(ocrMemory));
-}
-
-let ocrMemory = loadOcrMemory();
 
 // ---- P&L Tracker: a fully separate, manually-entered table (bookmaker x period) for bets
 // that never go through the accumulator tracker above (horse racing, small one-offs, etc).
@@ -262,33 +214,6 @@ function pnlGrandTotal() {
   return pnlTracker.bookmakers.reduce((sum, b) => sum + pnlRowTotal(b), 0);
 }
 
-// Strips the personal account suffix (e.g. "Bet365 (KR)" -> "Bet365") so layout memory is
-// shared across accounts at the same bookmaker, since the slip layout depends on the brand.
-function normalizeBookmakerKey(bookmaker) {
-  return (bookmaker || 'unknown').replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase() || 'unknown';
-}
-
-function bumpOffsetStat(bmKey, strategy) {
-  if (!ocrMemory.lineOffsetStats[bmKey]) ocrMemory.lineOffsetStats[bmKey] = { sameLine: 0, twoLineCombo: 0, oneLineBack: 0 };
-  ocrMemory.lineOffsetStats[bmKey][strategy] = (ocrMemory.lineOffsetStats[bmKey][strategy] || 0) + 1;
-}
-
-// `field` is 'selections' or 'markets' — kept separate per bookmaker so a market correction
-// can never collide with a selection correction that happens to share the same raw OCR text.
-function recordCorrection(bmKey, field, rawKey, finalValue) {
-  if (!rawKey || !finalValue || rawKey === finalValue.toLowerCase()) return;
-  if (!ocrMemory.corrections[bmKey]) ocrMemory.corrections[bmKey] = { selections: {}, markets: {} };
-  ocrMemory.corrections[bmKey][field][rawKey] = finalValue;
-}
-
-function getKnownTerms() {
-  return {
-    selections: [...new Set(bets.flatMap(b => b.selections.map(s => s.selection)).filter(Boolean))],
-    markets: [...new Set(bets.flatMap(b => b.selections.map(s => s.market)).filter(Boolean))],
-    competitions: [...new Set(bets.flatMap(b => b.selections.map(s => s.competition)).filter(Boolean))],
-  };
-}
-
 // Bookmakers aren't a fixed list — everyone uses a different set, so this just grows from
 // whatever the user has actually typed in before. Starts empty for a brand-new user/browser.
 function getKnownBookmakers() {
@@ -325,7 +250,7 @@ function getMostCommonValueForSelection(field, selectionValue) {
 }
 
 // Auto-fills Competition from the selection's most common past competition, once the
-// selection field has a value and Competition hasn't already been filled in (typed or scanned).
+// selection field has a value and Competition hasn't already been filled in.
 function autofillCompetitionFromSelection(block) {
   const selectionValue = block.querySelector('.sel-selection').value.trim();
   const competitionField = block.querySelector('.sel-competition');
@@ -334,238 +259,6 @@ function autofillCompetitionFromSelection(block) {
   if (competition) {
     competitionField.value = competition;
     competitionField.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-}
-
-function levenshtein(a, b) {
-  const m = a.length, n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  const dp = new Array(n + 1);
-  for (let j = 0; j <= n; j++) dp[j] = j;
-  for (let i = 1; i <= m; i++) {
-    let prev = dp[0];
-    dp[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const temp = dp[j];
-      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
-      prev = temp;
-    }
-  }
-  return dp[n];
-}
-
-// Snaps OCR text to the closest term the user has already typed before (e.g. corrects
-// "Lawrence Shankiand" -> "Lawrence Shankland" once that selection has been entered before).
-function snapToKnownTerm(candidate, knownTerms) {
-  if (!candidate) return candidate;
-  const lower = candidate.toLowerCase();
-  let best = null, bestScore = 0;
-  for (const term of knownTerms) {
-    const termLower = term.toLowerCase();
-    if (termLower === lower) return term;
-    const maxLen = Math.max(termLower.length, lower.length);
-    if (maxLen === 0) continue;
-    const score = 1 - levenshtein(lower, termLower) / maxLen;
-    if (score > bestScore) { bestScore = score; best = term; }
-  }
-  return (best && bestScore >= 0.78) ? best : candidate;
-}
-
-const OCR_CHROME_RE = /^(single|double|treble|four-?fold|five-?fold|six-?fold|accumulator|acca|each\s*way|e\/?w|multiples?|total\s*odds|combined\s*odds|win\s*stake|each\s*way\s*stake|stake|returns?|potential\s*returns?|bet\s*slip|selections?|bet365|sky\s*bet|ladbrokes|william\s*hill|ak\s*bets|betano|betway|pricedup|lottoland)$/i;
-
-function looksLikeOcrChrome(line) {
-  const t = line.trim();
-  return OCR_CHROME_RE.test(t) || /^[\d.,£\s]+$/.test(t);
-}
-
-// Best-effort: scans each OCR line for a price token (fraction or "@ price") and works out
-// the selection (and market, if shown) from nearby lines. Which nearby-line pattern to try
-// first is learned per bookmaker from past scans (see lineOffsetStats).
-function findSelectionCandidates(text, excludeFraction, bookmaker, knownTerms, globalEwTerms) {
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  // Digit-boundary guards keep this from matching inside a longer run of digits, like the "26/27"
-  // tail of a season string ("2026/27") getting misread as an odds fraction.
-  const fractionRe = /(?<!\d)(\d{1,3}\/\d{1,2})(?!\d)/;
-  const atPriceRe = /@\s*(\d+\.\d{1,2}|(?<!\d)\d{1,3}\/\d{1,2}(?!\d))/;
-  const candidates = [];
-  const bmKey = normalizeBookmakerKey(bookmaker);
-  const stats = ocrMemory.lineOffsetStats[bmKey] || { twoLineCombo: 0, oneLineBack: 0 };
-  // On an untrained tie, favour the simpler one-line-back guess (name directly above the price)
-  // over two-line-back — it's the more common layout and less likely to grab unrelated text.
-  const preferTwoLineFirst = stats.twoLineCombo > stats.oneLineBack;
-  const correctionMap = ocrMemory.corrections[bmKey] || { selections: {}, markets: {} };
-
-  lines.forEach((line, idx) => {
-    const priceMatch = line.match(fractionRe) || line.match(atPriceRe);
-    if (!priceMatch) return;
-    const price = priceMatch[1];
-    if (excludeFraction && price === excludeFraction) return;
-
-    let selection = '', market = '', strategy = '';
-    const sameLineLabel = line.replace(priceMatch[0], '').trim().replace(/^[\d.)\s-]+/, '').trim();
-
-    const tryTwoLineCombo = () => {
-      const prev1 = idx >= 1 ? lines[idx - 1] : '';
-      const prev2 = idx >= 2 ? lines[idx - 2] : '';
-      if (prev2 && !looksLikeOcrChrome(prev2) && !fractionRe.test(prev2)) {
-        selection = prev2;
-        market = !looksLikeOcrChrome(prev1) ? prev1 : '';
-        strategy = 'twoLineCombo';
-        return true;
-      }
-      return false;
-    };
-    const tryOneLineBack = () => {
-      const prev1 = idx >= 1 ? lines[idx - 1] : '';
-      if (prev1 && !looksLikeOcrChrome(prev1) && !fractionRe.test(prev1)) {
-        selection = prev1;
-        strategy = 'oneLineBack';
-        return true;
-      }
-      return false;
-    };
-
-    // Check the CLEANED version before committing to sameLine — a price that sits alone on its
-    // own line (e.g. "@ 5/2") can leave a meaningless leftover symbol like "@" behind, which
-    // would otherwise wrongly look like a same-line label and swallow the whole candidate once
-    // that symbol is stripped out below, instead of falling back to the line above.
-    const sameLineLabelClean = sameLineLabel.replace(/[^a-zA-Z0-9'&.\s-]/g, '').trim();
-    if (sameLineLabelClean.length > 1 && !looksLikeOcrChrome(sameLineLabelClean)) {
-      selection = sameLineLabel;
-      strategy = 'sameLine';
-    } else if (preferTwoLineFirst) {
-      tryTwoLineCombo() || tryOneLineBack();
-    } else {
-      tryOneLineBack() || tryTwoLineCombo();
-    }
-
-    selection = selection.replace(/[^a-zA-Z0-9'&.\s-]/g, '').trim();
-    market = market.replace(/[^a-zA-Z0-9'&.\s-]/g, '').trim();
-    if (!selection || selection.length <= 1 || selection.length >= 60) return;
-
-    const ocrRawSelection = selection.toLowerCase();
-    if (correctionMap.selections[ocrRawSelection]) {
-      selection = correctionMap.selections[ocrRawSelection];
-    } else {
-      selection = snapToKnownTerm(selection, knownTerms.selections);
-    }
-    const ocrRawMarket = market.toLowerCase();
-    if (market) {
-      if (correctionMap.markets[ocrRawMarket]) {
-        market = correctionMap.markets[ocrRawMarket];
-      } else {
-        market = snapToKnownTerm(market, knownTerms.markets);
-      }
-    }
-
-    // Each selection can carry its own each-way terms (e.g. one leg pays 4 places instead of
-    // the usual 3) — look for one nearby before falling back to whatever applies to the slip
-    // as a whole.
-    let ewFraction = globalEwTerms ? globalEwTerms.fraction : '';
-    let ewPlaces = globalEwTerms ? globalEwTerms.places : '';
-    for (let look = idx; look <= Math.min(idx + 5, lines.length - 1); look++) {
-      const ewMatch = lines[look].match(EACH_WAY_TERMS_RE);
-      if (ewMatch) { ewFraction = ewMatch[1]; ewPlaces = ewMatch[2]; break; }
-    }
-
-    candidates.push({ selection, market, price, ocrStrategy: strategy, ocrRawSelection, ocrRawMarket, ewFraction, ewPlaces });
-  });
-
-  const seen = new Set();
-  return candidates.filter(c => {
-    const key = c.selection.toLowerCase() + '|' + c.price;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 20);
-}
-
-function parseSlipText(text) {
-  const eachWay = isEachWay(text);
-  const globalEwTerms = eachWay ? findEachWayTerms(text) : null;
-  const { winStake, ewStake } = findStakes(text);
-  const bookmaker = findBookmaker(text);
-
-  return {
-    bookmaker,
-    betType: eachWay ? 'each-way' : 'win',
-    winStake,
-    ewStake,
-    totalOdds: findTotalOdds(text),
-    selectionCandidates: findSelectionCandidates(text, globalEwTerms ? globalEwTerms.fraction : null, bookmaker, getKnownTerms(), globalEwTerms),
-  };
-}
-
-function applyParsedSlip(parsed) {
-  const bmField = document.getElementById('f-bookmaker');
-  if (parsed.bookmaker && !bmField.value) {
-    bmField.value = parsed.bookmaker;
-  }
-
-  if (parsed.betType === 'each-way') {
-    document.getElementById('f-bet-type').value = 'each-way';
-    updateEwFieldsVisibility();
-  }
-
-  const winStakeField = document.getElementById('f-win-stake');
-  if (parsed.winStake !== null && !winStakeField.value) winStakeField.value = parsed.winStake;
-
-  const ewStakeField = document.getElementById('f-ew-stake');
-  if (parsed.ewStake !== null && !ewStakeField.value) ewStakeField.value = parsed.ewStake;
-
-  if (parsed.selectionCandidates.length > 0) {
-    selectionsEditor.innerHTML = '';
-    parsed.selectionCandidates.forEach(c => {
-      addSelectionRow({
-        selection: c.selection,
-        market: c.market || '',
-        competition: '',
-        price: c.price,
-        ewFraction: c.ewFraction || '',
-        ewPlaces: c.ewPlaces || '',
-      }, { ocrStrategy: c.ocrStrategy, ocrRawSelection: c.ocrRawSelection, ocrRawMarket: c.ocrRawMarket });
-    });
-    // OCR doesn't read the competition off the slip, so fall back to the same "used together
-    // 5+ times before" auto-fill that applies when typing a selection out by hand.
-    selectionsEditor.querySelectorAll('.selection-block').forEach(autofillCompetitionFromSelection);
-    updateEwFieldsVisibility();
-    recalcModalTotals();
-  } else if (parsed.totalOdds) {
-    document.getElementById('f-manual-odds').checked = true;
-    updateOddsMode();
-    document.getElementById('f-odds').value = parsed.totalOdds;
-  }
-}
-
-async function runScan(file) {
-  const statusEl = document.getElementById('scan-status');
-  const textWrap = document.getElementById('scan-text-wrap');
-  statusEl.hidden = false;
-  statusEl.textContent = 'Loading OCR engine…';
-  textWrap.hidden = true;
-
-  try {
-    const result = await Tesseract.recognize(file, 'eng', {
-      logger: (m) => {
-        if (m.status === 'recognizing text') {
-          statusEl.textContent = `Reading screenshot… ${Math.round(m.progress * 100)}%`;
-        } else if (m.status) {
-          statusEl.textContent = m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
-        }
-      },
-    });
-
-    const text = result.data.text || '';
-    document.getElementById('scan-text').textContent = text.trim() || '(no text found)';
-    textWrap.hidden = false;
-
-    applyParsedSlip(parseSlipText(text));
-
-    statusEl.textContent = "Done — check the fields below and fix anything that's wrong.";
-  } catch (err) {
-    console.error(err);
-    statusEl.textContent = 'Could not read the screenshot: ' + err.message;
   }
 }
 
@@ -649,8 +342,8 @@ function renderStats() {
   const lost = statsBets.filter(b => b.status === 'lost').length;
   const cashedOut = statsBets.filter(b => b.status === 'cash-out').length;
 
-  const staked = statsBets.reduce((sum, b) => sum + totalStake(b), 0);
-  const openStaked = statsBets.filter(b => b.status === 'open').reduce((sum, b) => sum + totalStake(b), 0);
+  const staked = statsBets.reduce((sum, b) => sum + stakeCost(b), 0);
+  const openStaked = statsBets.filter(b => b.status === 'open').reduce((sum, b) => sum + stakeCost(b), 0);
 
   const settled = statsBets.filter(b => b.status !== 'open');
   let returned = 0;
@@ -660,7 +353,7 @@ function renderStats() {
     }
     // lost/cash-out with no actualReturn entered contributes 0
   });
-  const settledStaked = settled.reduce((sum, b) => sum + totalStake(b), 0);
+  const settledStaked = settled.reduce((sum, b) => sum + stakeCost(b), 0);
   const pl = returned - settledStaked;
 
   const currentStatus = document.getElementById('filter-status').value;
@@ -714,12 +407,12 @@ const STAT_DETAIL_METRICS = {
   totalStaked: {
     label: 'Total stakes',
     color: 'var(--accent)',
-    getValue: (betsInGroup) => betsInGroup.reduce((sum, b) => sum + totalStake(b), 0),
+    getValue: (betsInGroup) => betsInGroup.reduce((sum, b) => sum + stakeCost(b), 0),
   },
   openStaked: {
     label: 'Open stakes',
     color: 'var(--accent)',
-    getValue: (betsInGroup) => betsInGroup.filter(b => b.status === 'open').reduce((sum, b) => sum + totalStake(b), 0),
+    getValue: (betsInGroup) => betsInGroup.filter(b => b.status === 'open').reduce((sum, b) => sum + stakeCost(b), 0),
   },
   settledReturn: {
     label: 'Settled return',
@@ -739,7 +432,7 @@ const STAT_DETAIL_METRICS = {
 
 function betPl(b) {
   const actual = b.actualReturn !== null && b.actualReturn !== undefined && b.actualReturn !== '' ? Number(b.actualReturn) : 0;
-  return actual - totalStake(b);
+  return actual - stakeCost(b);
 }
 
 // One point per date that has at least one settled bet — "Daily" is that date's own P&L,
@@ -1012,7 +705,7 @@ function renderTopSelectionsDrilldown(selection, market, competition) {
         <div class="drilldown-bet-info">
           <span class="date">${formatDate(b.datePlaced)}</span>
           <span class="bookmaker">${escapeHtml(b.bookmaker)}</span>
-          <span>${formatFoldLabel(b.selections.length)}${b.betType === 'each-way' ? '<span class="ew-badge">EW</span>' : ''}</span>
+          <span>${formatFoldLabel(b.selections.length)}${b.betType === 'each-way' ? '<span class="ew-badge">EW</span>' : ''}${b.boostPercent ? `<span class="boost-badge">${b.boostPercent}% Boost</span>` : ''}${b.freeBet ? '<span class="free-bet-badge">Free Bet</span>' : ''}</span>
         </div>
         <div class="drilldown-bet-figures">
           <span>Odds <b>${formatOdds(b.totalOdds, b.totalOddsRaw)}</b></span>
@@ -1280,7 +973,7 @@ function renderBetsList() {
             <span class="status-badge status-${bet.status}">${bet.status.replace('-', ' ')}</span>
           </div>
           <div class="bet-figures">
-            <span>${formatFoldLabel(bet.selections.length)}${bet.betType === 'each-way' ? '<span class="ew-badge">EW</span>' : ''}</span>
+            <span>${formatFoldLabel(bet.selections.length)}${bet.betType === 'each-way' ? '<span class="ew-badge">EW</span>' : ''}${bet.boostPercent ? `<span class="boost-badge">${bet.boostPercent}% Boost</span>` : ''}${bet.freeBet ? '<span class="free-bet-badge">Free Bet</span>' : ''}</span>
             <span>Odds <b>${formatOdds(bet.totalOdds, bet.totalOddsRaw)}</b></span>
             <span>Stake <b>${money(stake)}</b></span>
             ${bet.status !== 'won' ? `<span>Potential <b>${money(bet.potentialReturn)}</b></span>` : ''}
@@ -1408,8 +1101,6 @@ function openModal(bet, options = {}) {
   document.getElementById('btn-modal-back').hidden = !options.fromTopSelections;
   const isDuplicate = options.duplicate === true;
   betForm.reset();
-  document.getElementById('scan-status').hidden = true;
-  document.getElementById('scan-text-wrap').hidden = true;
 
   if (bet) {
     document.getElementById('modal-title').textContent = isDuplicate ? 'Duplicate Bet' : 'Edit Bet';
@@ -1424,6 +1115,10 @@ function openModal(bet, options = {}) {
     // A duplicate is meant for editing selections, so odds always recompute live from
     // whatever's in the price fields — never carried over frozen from a manually-entered total.
     document.getElementById('f-manual-odds').checked = isDuplicate ? false : !!bet.oddsManual;
+    document.getElementById('f-boost-applied').checked = !!bet.boostPercent;
+    document.getElementById('f-boost-percent').value = bet.boostPercent || '';
+    document.getElementById('boost-percent-wrap').hidden = !bet.boostPercent;
+    document.getElementById('f-free-bet').checked = !!bet.freeBet;
     document.getElementById('btn-delete-bet').hidden = isDuplicate;
 
     selectionsEditor.innerHTML = '';
@@ -1443,6 +1138,10 @@ function openModal(bet, options = {}) {
     document.getElementById('f-status').value = 'open';
     document.getElementById('f-bet-type').value = 'win';
     document.getElementById('f-manual-odds').checked = false;
+    document.getElementById('f-boost-applied').checked = false;
+    document.getElementById('f-boost-percent').value = '';
+    document.getElementById('boost-percent-wrap').hidden = true;
+    document.getElementById('f-free-bet').checked = false;
     document.getElementById('btn-delete-bet').hidden = true;
 
     selectionsEditor.innerHTML = '';
@@ -1513,6 +1212,37 @@ function isManualOddsMode() {
   return document.getElementById('f-manual-odds').checked;
 }
 
+function isBoostApplied() {
+  return document.getElementById('f-boost-applied').checked;
+}
+
+function getBoostPercent() {
+  if (!isBoostApplied()) return 0;
+  return parseFloat(document.getElementById('f-boost-percent').value) || 0;
+}
+
+function isFreeBet() {
+  return document.getElementById('f-free-bet').checked;
+}
+
+function updateBoostFieldVisibility() {
+  const applied = isBoostApplied();
+  document.getElementById('boost-percent-wrap').hidden = !applied;
+  const percentField = document.getElementById('f-boost-percent');
+  if (applied && percentField.value === '') percentField.value = '10';
+  recalcModalTotals();
+}
+
+function updateBoostNote(baseReturn, boostedReturn, boostPercent) {
+  const note = document.getElementById('f-boost-note');
+  if (!boostPercent || isNaN(baseReturn) || isNaN(boostedReturn) || boostedReturn <= baseReturn) {
+    note.hidden = true;
+    return;
+  }
+  note.hidden = false;
+  note.textContent = `incl. ${money(boostedReturn - baseReturn)} boost`;
+}
+
 function updateOddsMode() {
   const manual = isManualOddsMode();
   const oddsField = document.getElementById('f-odds');
@@ -1566,7 +1296,11 @@ function recalcManualPotentialReturn() {
   const winStake = parseFloat(document.getElementById('f-win-stake').value) || 0;
   const totalOddsDecimal = parseOddsToDecimal(document.getElementById('f-odds').value);
   const potentialField = document.getElementById('f-potential-return');
-  potentialField.value = isNaN(totalOddsDecimal) ? '' : money(winStake * totalOddsDecimal);
+  const baseReturn = isNaN(totalOddsDecimal) ? NaN : winStake * totalOddsDecimal;
+  const boostPercent = getBoostPercent();
+  const { rawReturn, finalReturn } = computeFinalReturn(baseReturn, winStake, isFreeBet(), boostPercent);
+  potentialField.value = isNaN(finalReturn) ? '' : money(finalReturn);
+  updateBoostNote(rawReturn, finalReturn, boostPercent);
   updateActualReturnMode();
 }
 
@@ -1582,6 +1316,9 @@ function recalcModalTotals() {
 
   const totals = computeTotals(selectionsData, betType);
   const potential = computePotentialReturn(totals, betType, winStake, ewStake);
+  const stake = winStake + (betType === 'each-way' ? ewStake : 0);
+  const boostPercent = getBoostPercent();
+  const { rawReturn, finalReturn } = computeFinalReturn(potential, stake, isFreeBet(), boostPercent);
 
   document.getElementById('f-odds').value = isNaN(totals.winDecimal) ? '' : totals.winDecimal.toFixed(2);
 
@@ -1593,20 +1330,16 @@ function recalcModalTotals() {
     placeNote.hidden = true;
   }
 
-  document.getElementById('f-potential-return').value = isNaN(potential) ? '' : money(potential);
+  document.getElementById('f-potential-return').value = isNaN(finalReturn) ? '' : money(finalReturn);
+  updateBoostNote(rawReturn, finalReturn, boostPercent);
   updateActualReturnMode();
 }
 
-function addSelectionRow(sel, ocrMeta) {
+function addSelectionRow(sel) {
   const isEw = document.getElementById('f-bet-type').value === 'each-way';
   const manual = isManualOddsMode();
   const block = document.createElement('div');
   block.className = 'selection-block';
-  if (ocrMeta?.ocrStrategy) {
-    block.dataset.ocrStrategy = ocrMeta.ocrStrategy;
-    block.dataset.ocrRawSelection = ocrMeta.ocrRawSelection || '';
-    block.dataset.ocrRawMarket = ocrMeta.ocrRawMarket || '';
-  }
   block.innerHTML = `
     <div class="selection-row-top">
       <span class="drag-handle" draggable="true" title="Drag to reorder">⠿</span>
@@ -1970,6 +1703,8 @@ betForm.addEventListener('submit', (e) => {
   const winStake = Number(document.getElementById('f-win-stake').value) || 0;
   const ewStake = betType === 'each-way' ? (Number(document.getElementById('f-ew-stake').value) || 0) : null;
   const manualOdds = isManualOddsMode();
+  const boostPercent = getBoostPercent();
+  const freeBet = isFreeBet();
 
   const selectionsData = getSelectionRowsData();
   const selections = selectionsData
@@ -2031,7 +1766,8 @@ betForm.addEventListener('submit', (e) => {
     totalOdds = totals.winDecimal;
     totalOddsRaw = null;
     placeOdds = betType === 'each-way' ? totals.placeDecimal : null;
-    potentialReturn = computePotentialReturn(totals, betType, winStake, ewStake || 0);
+    const stake = winStake + (betType === 'each-way' ? (ewStake || 0) : 0);
+    potentialReturn = computeFinalReturn(computePotentialReturn(totals, betType, winStake, ewStake || 0), stake, freeBet, boostPercent).finalReturn;
     if (isNaN(potentialReturn)) potentialReturn = null;
   }
 
@@ -2047,6 +1783,8 @@ betForm.addEventListener('submit', (e) => {
     totalOdds: Number(totalOdds.toFixed(2)),
     totalOddsRaw: totalOddsRaw || null,
     placeOdds: placeOdds !== null ? Number(placeOdds.toFixed(2)) : null,
+    boostPercent: boostPercent > 0 ? boostPercent : null,
+    freeBet,
     potentialReturn: potentialReturn === null ? null : Number(potentialReturn.toFixed(2)),
     actualReturn: document.getElementById('f-actual-return').value === '' ? null : Number(document.getElementById('f-actual-return').value),
     selections,
@@ -2059,30 +1797,6 @@ betForm.addEventListener('submit', (e) => {
     bets.push(bet);
     currentPage = 1;
   }
-
-  // Learn from this save: reinforce the line-layout pattern that got a selection right,
-  // or record a correction so the same OCR misread — in the selection name or the market —
-  // is fixed automatically next time.
-  const bmKeyForLearning = normalizeBookmakerKey(bet.bookmaker);
-  selectionsEditor.querySelectorAll('.selection-block').forEach(block => {
-    const strategy = block.dataset.ocrStrategy;
-    if (!strategy) return;
-    const finalSelection = block.querySelector('.sel-selection').value.trim();
-    if (!finalSelection) return;
-    const rawSelectionKey = block.dataset.ocrRawSelection || '';
-    if (finalSelection.toLowerCase() === rawSelectionKey) {
-      bumpOffsetStat(bmKeyForLearning, strategy);
-    } else {
-      recordCorrection(bmKeyForLearning, 'selections', rawSelectionKey, finalSelection);
-    }
-
-    const rawMarketKey = block.dataset.ocrRawMarket || '';
-    const finalMarket = block.querySelector('.sel-market').value.trim();
-    if (rawMarketKey && finalMarket.toLowerCase() !== rawMarketKey) {
-      recordCorrection(bmKeyForLearning, 'markets', rawMarketKey, finalMarket);
-    }
-  });
-  saveOcrMemory();
 
   saveBets();
   closeModal();
@@ -2102,6 +1816,9 @@ document.getElementById('f-bet-type').addEventListener('change', () => {
   recalcModalTotals();
 });
 document.getElementById('f-manual-odds').addEventListener('change', updateOddsMode);
+document.getElementById('f-boost-applied').addEventListener('change', updateBoostFieldVisibility);
+document.getElementById('f-boost-percent').addEventListener('input', recalcModalTotals);
+document.getElementById('f-free-bet').addEventListener('change', recalcModalTotals);
 document.getElementById('f-win-stake').addEventListener('input', () => {
   mirrorEwStakeFromWinStake();
   recalcModalTotals();
@@ -2173,14 +1890,6 @@ selectionsEditor.addEventListener('dragover', (e) => {
   const rect = targetBlock.getBoundingClientRect();
   const isBelowMidpoint = e.clientY > rect.top + rect.height / 2;
   selectionsEditor.insertBefore(draggedSelectionBlock, isBelowMidpoint ? targetBlock.nextSibling : targetBlock);
-});
-document.getElementById('btn-scan').addEventListener('click', () => {
-  document.getElementById('f-screenshot').click();
-});
-document.getElementById('f-screenshot').addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (file) runScan(file);
 });
 document.getElementById('btn-add').addEventListener('click', () => openModal(null));
 document.getElementById('btn-close-stat-detail').addEventListener('click', () => {
