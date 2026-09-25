@@ -148,6 +148,8 @@ body {
 .filters-bar .autocomplete-wrap { flex: 0 0 auto; }
 .filters-bar .select-dropdown-proxy { padding: 7px 10px; }
 .filters-bar .autocomplete-wrap:has(#sort-by) { min-width: 210px; }
+.filters-bar .autocomplete-wrap:has(#filter-bookmaker) { width: 160px; }
+.filters-bar .autocomplete-wrap:has(#filter-bet-type) { width: 130px; }
 .date-filter { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
 .filter-checkbox {
   display: flex;
