@@ -1671,6 +1671,7 @@ function attachAutocomplete(input, getSuggestions, onAccept, { showAllWhenEmpty 
 
   function updateActive() {
     [...list.children].forEach((el, i) => el.classList.toggle('active', i === activeIndex));
+    list.children[activeIndex]?.scrollIntoView({ block: 'nearest' });
   }
 
   function close() {
@@ -1680,10 +1681,12 @@ function attachAutocomplete(input, getSuggestions, onAccept, { showAllWhenEmpty 
     activeIndex = -1;
   }
 
-  function render() {
+  // `force` is used when the user presses ArrowDown on a closed list, so the keyboard can
+  // open the suggestions even for an empty selection/market field.
+  function render(force = false) {
     const query = input.value.trim().toLowerCase();
     if (!query) {
-      if (!showAllWhenEmpty) { close(); return; }
+      if (!showAllWhenEmpty && force !== true) { close(); return; }
       items = getSuggestions(input).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).slice(0, 20);
     } else {
       items = getSuggestions(input)
@@ -1714,7 +1717,13 @@ function attachAutocomplete(input, getSuggestions, onAccept, { showAllWhenEmpty 
     input.addEventListener('click', render);
   }
   input.addEventListener('keydown', (e) => {
-    if (list.hidden) return;
+    if (list.hidden) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        render(true);
+      }
+      return;
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       activeIndex = Math.min(activeIndex + 1, items.length - 1);
