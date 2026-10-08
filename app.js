@@ -1790,7 +1790,10 @@ betForm.addEventListener('submit', (e) => {
       // should still colour every non-void selection the same way the tick would have. And
       // reverting a bet back to Open (e.g. undoing an accidental lost/won tick) should clear
       // every selection's result too, rather than leaving a stale won/placed/lost mark behind.
-      const result = status === 'open' ? null : (status === 'won' && !s.void) ? 'won' : (priorMatch?.result || null);
+      // That clear only applies when the bet's status actually changes back to Open in this
+      // edit — a bet that was already Open keeps the selections ticked won so far.
+      const revertedToOpen = status === 'open' && existingBet && existingBet.status !== 'open';
+      const result = revertedToOpen ? null : (status === 'won' && !s.void) ? 'won' : (priorMatch?.result || null);
       return {
         selection: s.selection,
         market: s.market,
