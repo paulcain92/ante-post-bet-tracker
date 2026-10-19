@@ -39,6 +39,22 @@ function stakeCost(bet) {
   return bet.freeBet ? 0 : totalStake(bet);
 }
 
+// Each-way terms for a selection chip, e.g. " · 1/4 3pl". Empty for win-only bets, selections
+// with no terms entered, or the legacy "Win only" fraction.
+function ewTermsSuffix(bet, s) {
+  if (bet.betType !== 'each-way' || !s.ewFraction || isWinOnlyFraction(s.ewFraction)) return '';
+  return ` · ${escapeHtml(s.ewFraction)}${s.ewPlaces ? ' ' + escapeHtml(s.ewPlaces) + 'pl' : ''}`;
+}
+
+// What an open each-way bet pays if every selection places but not all of them win (any mix of
+// wins and places): only the place part pays, so the win stake is lost. Null when there are no
+// place terms to calculate from (win-only bets, or manually-priced total odds).
+function placeOnlyReturn(bet) {
+  if (bet.betType !== 'each-way' || !bet.placeOdds || !bet.eachWayStake) return null;
+  const ew = Number(bet.eachWayStake);
+  return bet.freeBet ? ew * (bet.placeOdds - 1) : ew * bet.placeOdds;
+}
+
 function money(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return '—';
   const rounded = Math.round(Number(n) * 100) / 100;
@@ -1024,7 +1040,7 @@ function renderBetsList() {
       const tickTitle = result === 'won' ? 'Won — click to change' : result === 'placed' ? 'Placed (each-way) — click to change' : result === 'lost' ? 'Lost — click to change' : 'Mark as won';
       return `<span class="chip ${resultClass}">
                 ${canTrackResults && !s.void ? `<button type="button" class="chip-tick" data-bet-id="${bet.id}" data-sel-index="${selIndex}" title="${tickTitle}">${tickIcon}</button>` : ''}
-                <b>${highlightMatch(s.selection, searchQuery)}</b> <span class="chip-market">— ${highlightMatch(s.market, searchQuery)}${s.competition ? ' · ' + highlightMatch(s.competition, searchQuery) : ''}${s.price ? ' @ ' + escapeHtml(s.price) : ''}${s.void ? ' · Void' : ''}</span>
+                <b>${highlightMatch(s.selection, searchQuery)}</b> <span class="chip-market">— ${highlightMatch(s.market, searchQuery)}${s.competition ? ' · ' + highlightMatch(s.competition, searchQuery) : ''}${s.price ? ' @ ' + escapeHtml(s.price) : ''}${ewTermsSuffix(bet, s)}${s.void ? ' · Void' : ''}</span>
               </span>`;
     }).join('');
 
@@ -1041,6 +1057,7 @@ function renderBetsList() {
             <span>Odds <b>${formatOdds(bet.totalOdds, bet.totalOddsRaw)}</b></span>
             <span>Stake <b>${money(stake)}</b></span>
             ${bet.status !== 'won' ? `<span>Potential <b>${money(bet.potentialReturn)}</b></span>` : ''}
+            ${bet.status === 'open' && placeOnlyReturn(bet) !== null ? `<span title="Return if every selection places but not all win">If placed <b>${money(placeOnlyReturn(bet))}</b></span>` : ''}
             <span>Return <b>${money(bet.actualReturn)}</b></span>
           </div>
           <div class="bet-actions">
