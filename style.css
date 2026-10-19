@@ -183,6 +183,19 @@ body {
 .bet-meta .bookmaker { color: var(--text-muted); }
 .bet-figures { display: flex; gap: 16px; font-size: 13px; color: var(--text-muted); flex-wrap: wrap; }
 .bet-figures b { color: var(--text); font-weight: 600; }
+.bet-figures > span:first-child { display: flex; align-items: center; white-space: nowrap; }
+
+/* On wide screens every card lays its figures out on the same fixed columns, so
+   fold / odds / stake / potential / if placed / return line up card to card. Empty
+   slots (e.g. no "If placed" on a win-only bet) are kept so the columns never shift. */
+@media (min-width: 1500px) {
+  .bet-card-top { display: grid; grid-template-columns: 330px 1fr auto; column-gap: 14px; }
+  .bet-figures {
+    display: grid;
+    grid-template-columns: 200px 110px 90px 140px 130px 120px;
+    gap: 0 12px;
+  }
+}
 
 .status-badge {
   display: inline-block;

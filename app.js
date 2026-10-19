@@ -39,11 +39,11 @@ function stakeCost(bet) {
   return bet.freeBet ? 0 : totalStake(bet);
 }
 
-// Each-way terms for a selection chip, e.g. " · 1/4 3pl". Empty for win-only bets, selections
-// with no terms entered, or the legacy "Win only" fraction.
+// Each-way places for a selection chip, e.g. " (3 places)". Empty for win-only bets or
+// selections with no places entered.
 function ewTermsSuffix(bet, s) {
-  if (bet.betType !== 'each-way' || !s.ewFraction || isWinOnlyFraction(s.ewFraction)) return '';
-  return ` · ${escapeHtml(s.ewFraction)}${s.ewPlaces ? ' ' + escapeHtml(s.ewPlaces) + 'pl' : ''}`;
+  if (bet.betType !== 'each-way' || !s.ewPlaces) return '';
+  return ` (${escapeHtml(s.ewPlaces)} ${Number(s.ewPlaces) === 1 ? 'place' : 'places'})`;
 }
 
 // What an open each-way bet pays if every selection places but not all of them win (any mix of
@@ -1056,8 +1056,8 @@ function renderBetsList() {
             <span>${formatFoldLabel(bet.selections.length)}${bet.betType === 'each-way' ? '<span class="ew-badge">EW</span>' : ''}${bet.boostPercent ? `<span class="boost-badge">${bet.boostPercent}% Boost</span>` : ''}${bet.freeBet ? '<span class="free-bet-badge">Free Bet</span>' : ''}</span>
             <span>Odds <b>${formatOdds(bet.totalOdds, bet.totalOddsRaw)}</b></span>
             <span>Stake <b>${money(stake)}</b></span>
-            ${bet.status !== 'won' ? `<span>Potential <b>${money(bet.potentialReturn)}</b></span>` : ''}
-            ${bet.status === 'open' && placeOnlyReturn(bet) !== null ? `<span title="Return if every selection places but not all win">If placed <b>${money(placeOnlyReturn(bet))}</b></span>` : ''}
+            ${bet.status !== 'won' ? `<span>Potential <b>${money(bet.potentialReturn)}</b></span>` : '<span></span>'}
+            ${bet.status === 'open' && placeOnlyReturn(bet) !== null ? `<span title="Return if every selection places but not all win">If placed <b>${money(placeOnlyReturn(bet))}</b></span>` : '<span></span>'}
             <span>Return <b>${money(bet.actualReturn)}</b></span>
           </div>
           <div class="bet-actions">
