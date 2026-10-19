@@ -1051,9 +1051,9 @@ function renderBetsList() {
             <span class="date">${formatDate(bet.datePlaced)}</span>
             <span class="bookmaker">${escapeHtml(bet.bookmaker)}</span>
             <span class="status-badge status-${bet.status}">${bet.status.replace('-', ' ')}</span>
+            ${bet.betType === 'each-way' || bet.boostPercent || bet.freeBet ? `<span class="bet-badges">${bet.betType === 'each-way' ? '<span class="ew-badge">EW</span>' : ''}${bet.boostPercent ? `<span class="boost-badge">${bet.boostPercent}% Boost</span>` : ''}${bet.freeBet ? '<span class="free-bet-badge">Free Bet</span>' : ''}</span>` : ''}
           </div>
           <div class="bet-figures">
-            <span>${formatFoldLabel(bet.selections.length)}${bet.betType === 'each-way' ? '<span class="ew-badge">EW</span>' : ''}${bet.boostPercent ? `<span class="boost-badge">${bet.boostPercent}% Boost</span>` : ''}${bet.freeBet ? '<span class="free-bet-badge">Free Bet</span>' : ''}</span>
             <span>Odds <b>${formatOdds(bet.totalOdds, bet.totalOddsRaw)}</b></span>
             <span>Stake <b>${money(stake)}</b></span>
             ${bet.status !== 'won' ? `<span>Potential <b>${money(bet.potentialReturn)}</b></span>` : '<span></span>'}
