@@ -1057,7 +1057,7 @@ function renderBetsList() {
             <span>Odds <b>${formatOdds(bet.totalOdds, bet.totalOddsRaw)}</b></span>
             <span>Stake <b>${money(stake)}</b></span>
             ${bet.status !== 'won' ? `<span>Potential <b>${money(bet.potentialReturn)}</b></span>` : '<span></span>'}
-            ${bet.status === 'open' && placeOnlyReturn(bet) !== null ? `<span title="Return if every selection places but not all win">If placed <b>${money(placeOnlyReturn(bet))}</b></span>` : '<span></span>'}
+            ${bet.status === 'open' && placeOnlyReturn(bet) !== null ? `<span class="if-placed" title="Return if every selection places but not all win">If placed <b>${money(placeOnlyReturn(bet))}</b></span>` : '<span></span>'}
             <span>Return <b>${money(bet.actualReturn)}</b></span>
           </div>
           <div class="bet-actions">
