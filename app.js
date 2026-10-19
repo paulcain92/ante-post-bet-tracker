@@ -1004,8 +1004,10 @@ function renderBetsList() {
   if (totalPages > 1) {
     pagination.hidden = false;
     document.getElementById('pagination-info').textContent = `Page ${currentPage} of ${totalPages}`;
+    document.getElementById('btn-first-page').disabled = currentPage === 1;
     document.getElementById('btn-prev-page').disabled = currentPage === 1;
     document.getElementById('btn-next-page').disabled = currentPage === totalPages;
+    document.getElementById('btn-last-page').disabled = currentPage === totalPages;
   } else {
     pagination.hidden = true;
   }
@@ -2041,12 +2043,20 @@ document.getElementById('btn-clear-filters').addEventListener('click', () => {
   render();
 });
 
+document.getElementById('btn-first-page').addEventListener('click', () => {
+  currentPage = 1;
+  render();
+});
 document.getElementById('btn-prev-page').addEventListener('click', () => {
   currentPage--;
   render();
 });
 document.getElementById('btn-next-page').addEventListener('click', () => {
   currentPage++;
+  render();
+});
+document.getElementById('btn-last-page').addEventListener('click', () => {
+  currentPage = Infinity;
   render();
 });
 
