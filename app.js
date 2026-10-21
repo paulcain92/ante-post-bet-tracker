@@ -39,10 +39,13 @@ function stakeCost(bet) {
   return bet.freeBet ? 0 : totalStake(bet);
 }
 
-// Each-way places for a selection chip, e.g. " (3 places)". Empty for win-only bets or
-// selections with no places entered.
+// Each-way places for a selection chip, e.g. " (3 places)", or " (Win only)" for a selection
+// in an each-way bet that has no place terms. Empty for win-only bets or selections with
+// nothing entered.
 function ewTermsSuffix(bet, s) {
-  if (bet.betType !== 'each-way' || !s.ewPlaces) return '';
+  if (bet.betType !== 'each-way') return '';
+  if (isWinOnlyFraction(s.ewFraction)) return ' (Win only)';
+  if (!s.ewPlaces) return '';
   return ` (${escapeHtml(s.ewPlaces)} ${Number(s.ewPlaces) === 1 ? 'place' : 'places'})`;
 }
 
