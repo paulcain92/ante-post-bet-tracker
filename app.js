@@ -1035,7 +1035,9 @@ function renderBetsList() {
 
   container.innerHTML = list.map(bet => {
     const stake = totalStake(bet);
-    const canTrackResults = bet.status === 'open';
+    // Lost bets stay tickable so the other selections can still be marked won, to see how
+    // close the accumulator came.
+    const canTrackResults = bet.status === 'open' || bet.status === 'lost';
     const chips = bet.selections.map((s, selIndex) => {
       const result = s.result || 'pending';
       const resultClass = s.void ? 'chip-void' : result === 'won' ? 'chip-won' : result === 'placed' ? 'chip-placed' : result === 'lost' ? 'chip-lost' : '';
@@ -1089,7 +1091,11 @@ function renderBetsList() {
       // A single lost leg kills the whole accumulator outright, so settle the bet as lost the
       // moment any selection is ticked lost — same idea as the all-won case below, just the
       // opposite outcome. Checked first since one lost leg overrides any other result.
-      if (targetBet.selections.some(s => s.result === 'lost')) {
+      // Only open bets get auto-settled — ticking a lost bet's other selections is just
+      // record-keeping and must never change its status or return.
+      if (targetBet.status !== 'open') {
+        // leave status and return as they are
+      } else if (targetBet.selections.some(s => s.result === 'lost')) {
         targetBet.status = 'lost';
         if (targetBet.actualReturn === null || targetBet.actualReturn === undefined) {
           targetBet.actualReturn = 0;
