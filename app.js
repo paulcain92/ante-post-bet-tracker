@@ -1213,6 +1213,9 @@ function openModal(bet, options = {}) {
 
     selectionsEditor.innerHTML = '';
     bet.selections.forEach(s => addSelectionRow(s));
+    // Remember which saved selection each row came from, so its won/placed/lost result
+    // survives the row being edited (e.g. fixing a spelling mistake in the name).
+    [...selectionsEditor.querySelectorAll('.selection-block')].forEach((block, i) => { block.dataset.origIndex = i; });
 
     updateEwFieldsVisibility();
     updateOddsMode();
@@ -1379,6 +1382,7 @@ function getSelectionRowsData() {
     ewFraction: block.querySelector('.sel-ew-fraction').value.trim(),
     ewPlaces: block.querySelector('.sel-ew-places').value.trim(),
     void: block.querySelector('.sel-void').checked,
+    origIndex: block.dataset.origIndex,
   }));
 }
 
@@ -1811,9 +1815,13 @@ betForm.addEventListener('submit', (e) => {
     .map(s => {
       // Carry over the won/placed tick from the existing bet's matching selection, so
       // editing a bet (e.g. fixing a price) doesn't wipe out progress tracked on open bets.
-      const priorMatch = existingBet?.selections.find(old =>
-        old.selection === s.selection && old.market === s.market && old.competition === s.competition
-      );
+      // Rows loaded from the saved bet are matched by position, so editing the name/market/
+      // competition keeps the result; only brand-new rows fall back to matching on the text.
+      const priorMatch = s.origIndex !== undefined
+        ? existingBet?.selections[Number(s.origIndex)]
+        : existingBet?.selections.find(old =>
+            old.selection === s.selection && old.market === s.market && old.competition === s.competition
+          );
       // Settling a bet as Won manually (rather than ticking each selection individually)
       // should still colour every non-void selection the same way the tick would have. And
       // reverting a bet back to Open (e.g. undoing an accidental lost/won tick) should clear
