@@ -310,11 +310,17 @@ function autofillCompetitionFromSelection(block) {
 
 // ---------- Filtering / sorting ----------
 
+// The search box takes several terms separated by commas (e.g. "Arsenal, Matt Rush"); a bet
+// matches only if every term appears somewhere in it.
+function getSearchTerms() {
+  return document.getElementById('search-input').value.split(',').map(t => t.trim()).filter(Boolean);
+}
+
 // `includeStatus: false` is used by the stats bar, so the status breakdown (Open/Won/Lost/
 // Cash out counts) reflects whatever OTHER filters are active (bookmaker, bet type, dates,
 // search) without being collapsed down to just the currently-selected status.
 function betMatchesFilters(bet, { includeStatus = true } = {}) {
-  const search = document.getElementById('search-input').value.trim().toLowerCase();
+  const searchTerms = getSearchTerms().map(t => t.toLowerCase());
   const status = document.getElementById('filter-status').value;
   const bookmaker = document.getElementById('filter-bookmaker').value;
   const betType = document.getElementById('filter-bet-type').value;
@@ -329,10 +335,10 @@ function betMatchesFilters(bet, { includeStatus = true } = {}) {
   if (dateFrom && bet.datePlaced < dateFrom) return false;
   if (dateTo && bet.datePlaced > dateTo) return false;
 
-  if (search) {
+  if (searchTerms.length > 0) {
     const hay = bet.selections.map(s => `${s.selection} ${s.market} ${s.competition}`).join(' ').toLowerCase()
       + ' ' + bet.bookmaker.toLowerCase();
-    if (!hay.includes(search)) return false;
+    if (!searchTerms.every(term => hay.includes(term))) return false;
   }
 
   return true;
@@ -1058,7 +1064,7 @@ function renderBetsList() {
     pagination.hidden = true;
   }
 
-  const searchQuery = document.getElementById('search-input').value.trim();
+  const searchQuery = getSearchTerms();
 
   container.innerHTML = list.map(bet => {
     const stake = totalStake(bet);
@@ -1198,10 +1204,12 @@ function escapeRegExp(str) {
 
 // Wraps every occurrence of `query` inside `text` in a <mark>, escaping each segment
 // separately so HTML-escaping never desyncs from where the match actually is.
-function highlightMatch(text, query) {
+function highlightMatch(text, terms) {
   const str = String(text ?? '');
-  if (!query) return escapeHtml(str);
-  const re = new RegExp('(' + escapeRegExp(query) + ')', 'ig');
+  if (!terms || terms.length === 0) return escapeHtml(str);
+  // Longest terms first so a short term can't cut a longer overlapping one in half.
+  const pattern = [...terms].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|');
+  const re = new RegExp('(' + pattern + ')', 'ig');
   return str.split(re).map((part, i) =>
     i % 2 === 1 ? `<mark class="search-highlight">${escapeHtml(part)}</mark>` : escapeHtml(part)
   ).join('');
