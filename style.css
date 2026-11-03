@@ -326,6 +326,20 @@ body {
 }
 .pagination button:disabled { opacity: 0.4; cursor: default; }
 #pagination-info { font-size: 13px; color: var(--text-muted); }
+.backup-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--orange);
+  border-radius: var(--radius);
+  font-size: 13.5px;
+}
+.backup-banner[hidden] { display: none; }
+.backup-banner span { flex: 1 1 260px; }
 .backup-reminder {
   text-align: center;
   font-size: 12px;

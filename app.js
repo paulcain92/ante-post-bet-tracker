@@ -11,12 +11,35 @@ let topSelectionsReturnContext = null;
 // time the modal opens, so Cancel/X can warn before discarding in-progress work.
 let modalDirty = false;
 
-function loadBets() {
+// If saved data can't be read, the app starts empty — and the next save would overwrite the
+// unreadable data for good. So a copy is kept under a separate key first (once per distinct
+// copy), and the user is told, so nothing is ever silently lost.
+function keepUnreadableCopy(key, raw, what) {
+  const prefix = key + '.unreadable-';
+  let alreadyKept = false;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k.startsWith(prefix) && localStorage.getItem(k) === raw) { alreadyKept = true; break; }
+    }
+    if (!alreadyKept) localStorage.setItem(prefix + Date.now(), raw);
+  } catch (e) {
+    console.error('Could not keep a copy of the unreadable data', e);
+  }
+  alert(`Your saved ${what} couldn't be read, so the tracker has started empty.\n\nNothing has been deleted: a copy of the unreadable data has been kept in this browser. Please don't add anything new until it's been recovered — import a backup file instead if you have one.`);
+}
+
+function loadBets() {
+  let raw = null;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error('Saved bets are not a list');
+    return parsed;
   } catch (e) {
     console.error('Failed to load bets', e);
+    if (raw) keepUnreadableCopy(STORAGE_KEY, raw, 'bets');
     return [];
   }
 }
@@ -193,15 +216,19 @@ function computeFinalReturn(baseReturn, stake, freeBet, boostPercent) {
 const PNL_TRACKER_KEY = 'accaTracker.pnlTracker.v1';
 
 function loadPnlTracker() {
+  let raw = null;
   try {
-    const raw = localStorage.getItem(PNL_TRACKER_KEY);
+    raw = localStorage.getItem(PNL_TRACKER_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed !== null && (typeof parsed !== 'object' || Array.isArray(parsed))) throw new Error('Saved P&L Tracker is not an object');
     return {
       bookmakers: parsed?.bookmakers || [],
       periods: parsed?.periods || [],
       values: parsed?.values || {},
     };
   } catch (e) {
+    console.error('Failed to load P&L Tracker', e);
+    if (raw) keepUnreadableCopy(PNL_TRACKER_KEY, raw, 'P&L Tracker');
     return { bookmakers: [], periods: [], values: {} };
   }
 }
@@ -2096,14 +2123,59 @@ document.getElementById('btn-last-page').addEventListener('click', () => {
 
 // ---------- Export / Import ----------
 
-document.getElementById('btn-export').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(bets, null, 2)], { type: 'application/json' });
+const LAST_EXPORT_KEY = 'accaTracker.lastExport.v1';
+const BACKUP_SNOOZE_KEY = 'accaTracker.backupSnooze.v1';
+const BACKUP_MAX_AGE_DAYS = 7;
+
+function getLastExportDate() {
+  try {
+    const raw = localStorage.getItem(LAST_EXPORT_KEY);
+    const d = raw ? new Date(raw) : null;
+    return d && !isNaN(d.getTime()) ? d : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function describeDaysAgo(days) {
+  return days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+}
+
+// Shows when the last backup was in the footer, and a banner at the top when there's no
+// backup on record or the last one is a week or more old (unless snoozed until tomorrow).
+function renderBackupReminder() {
+  const last = getLastExportDate();
+  const days = last ? Math.max(0, Math.floor((Date.now() - last.getTime()) / 86400000)) : null;
+  document.getElementById('last-backup-info').textContent = last ? `Last backup: ${describeDaysAgo(days)}.` : 'No backup recorded yet.';
+
+  let snoozedToday = false;
+  try { snoozedToday = localStorage.getItem(BACKUP_SNOOZE_KEY) === new Date().toISOString().slice(0, 10); } catch (e) {}
+  const overdue = days === null || days >= BACKUP_MAX_AGE_DAYS;
+  document.getElementById('backup-banner-text').textContent = days === null
+    ? "You haven't exported a backup yet. Your bets and P&L Tracker only exist in this browser."
+    : `Your last backup was ${days} days ago. Export a fresh one to keep your history safe.`;
+  document.getElementById('backup-banner').hidden = !(overdue && !snoozedToday);
+}
+
+// The backup holds everything — bets and the P&L Tracker — in one file.
+function exportBackup() {
+  const payload = { app: 'acca-tracker', version: 2, exportedAt: new Date().toISOString(), bets, pnlTracker };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = `acca-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
+  try { localStorage.setItem(LAST_EXPORT_KEY, new Date().toISOString()); } catch (e) {}
+  renderBackupReminder();
+}
+
+document.getElementById('btn-export').addEventListener('click', exportBackup);
+document.getElementById('btn-banner-export').addEventListener('click', exportBackup);
+document.getElementById('btn-banner-snooze').addEventListener('click', () => {
+  try { localStorage.setItem(BACKUP_SNOOZE_KEY, new Date().toISOString().slice(0, 10)); } catch (e) {}
+  renderBackupReminder();
 });
 
 document.getElementById('btn-import').addEventListener('click', () => {
@@ -2116,8 +2188,13 @@ document.getElementById('import-file').addEventListener('change', (e) => {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      const imported = JSON.parse(reader.result);
+      const parsed = JSON.parse(reader.result);
+      // Older backups are just a list of bets; newer ones also carry the P&L Tracker.
+      const imported = Array.isArray(parsed) ? parsed : parsed?.bets;
       if (!Array.isArray(imported)) throw new Error('Invalid file format');
+      const importedPnl = Array.isArray(parsed) ? null : parsed?.pnlTracker;
+      const pnlIsValid = importedPnl && Array.isArray(importedPnl.bookmakers) && Array.isArray(importedPnl.periods)
+        && importedPnl.values && typeof importedPnl.values === 'object';
       const mode = confirm(
         `Import ${imported.length} bet(s).\n\nOK = merge with existing bets\nCancel = replace all existing bets`
       );
@@ -2131,6 +2208,13 @@ document.getElementById('import-file').addEventListener('change', (e) => {
         bets = imported;
       }
       saveBets();
+      if (pnlIsValid) {
+        const currentHasPnl = pnlTracker.bookmakers.length > 0 || pnlTracker.periods.length > 0;
+        if (!currentHasPnl || confirm('This backup also contains a P&L Tracker.\n\nOK = replace your current P&L Tracker with it\nCancel = keep your current P&L Tracker')) {
+          pnlTracker = { bookmakers: importedPnl.bookmakers, periods: importedPnl.periods, values: importedPnl.values };
+          savePnlTracker();
+        }
+      }
       render();
     } catch (err) {
       alert('Could not import file: ' + err.message);
@@ -2143,3 +2227,4 @@ document.getElementById('import-file').addEventListener('change', (e) => {
 // ---------- Init ----------
 
 render();
+renderBackupReminder();

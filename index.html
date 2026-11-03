@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PC Ante-Post Bet Tracker</title>
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 
@@ -19,6 +19,12 @@
     <input type="file" id="import-file" accept="application/json" hidden>
   </div>
 </header>
+
+<div id="backup-banner" class="backup-banner" hidden>
+  <span id="backup-banner-text"></span>
+  <button type="button" id="btn-banner-export" class="btn btn-primary">Export now</button>
+  <button type="button" id="btn-banner-snooze" class="btn btn-ghost">Remind me tomorrow</button>
+</div>
 
 <section class="stats-bar" id="stats-bar"></section>
 
@@ -60,7 +66,7 @@
   <button type="button" id="btn-last-page" class="btn btn-ghost">Last »</button>
 </div>
 
-<p class="backup-reminder">Your bets are stored locally in this browser only. Export a backup weekly to avoid losing your history.</p>
+<p class="backup-reminder">Your bets are stored locally in this browser only. Export a backup weekly to avoid losing your history. <span id="last-backup-info"></span></p>
 
 <!-- Stat Detail Modal -->
 <div id="stat-detail-backdrop" class="modal-backdrop" hidden>
@@ -221,6 +227,6 @@
   </div>
 </div>
 
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
