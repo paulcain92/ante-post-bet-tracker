@@ -872,7 +872,6 @@ function openTopSelectionsModal() {
 
 const HEDGE_COLORS = ['#6fb0c9', '#c98d79', '#f0c93a', '#a597cf', '#7bc79a', '#e08a8a', '#8fa0d6'];
 const HEDGE_TOP_N = 7;
-const HEDGE_TOP_COMPETITIONS = 10;
 const HEDGE_MIN_BETS = 10;
 const hedgingOpenCompetitions = new Set();
 // What the ‹ arrow does from the current Hedging screen (market -> list, accumulators -> market).
@@ -950,25 +949,23 @@ function renderHedgingMarketList() {
     body.innerHTML = `<p class="chart-empty">No markets with ${HEDGE_MIN_BETS}+ open bets across more than one selection yet.</p>`;
     return;
   }
-  const hiddenCount = Math.max(0, competitions.length - HEDGE_TOP_COMPETITIONS);
   body.innerHTML = `
-    <p class="hedge-note">Pick a market to see who else you've backed in it. Only markets with ${HEDGE_MIN_BETS}+ open bets across more than one selection are shown.${hiddenCount > 0 ? ` Showing your top ${HEDGE_TOP_COMPETITIONS} competitions — use the filter to find the other ${hiddenCount}.` : ''}</p>
+    <p class="hedge-note">Pick a market to see who else you've backed in it. Only markets with ${HEDGE_MIN_BETS}+ open bets across more than one selection are shown.</p>
     <input type="text" id="hedging-search" class="hedging-search" placeholder="Filter markets...">
     <div id="hedging-market-list"></div>
   `;
   const list = document.getElementById('hedging-market-list');
   const fill = () => {
     const q = document.getElementById('hedging-search').value.trim().toLowerCase();
-    // With no filter only the busiest competitions are listed (collapsed); filtering searches
-    // every competition and opens the matches so the results are visible straight away.
-    const groups = (q ? competitions : competitions.slice(0, HEDGE_TOP_COMPETITIONS))
+    // Every qualifying competition is listed (collapsed, busiest first); filtering opens the
+    // matches so the results are visible straight away.
+    const groups = competitions
       .map(c => ({ ...c, markets: c.markets.filter(m => !q || `${m.market} ${m.competition}`.toLowerCase().includes(q)) }))
       .filter(c => c.markets.length > 0);
     list.innerHTML = groups.length === 0 ? '<p class="chart-empty">No markets match.</p>' : groups.map(c => `
       <details class="hedge-competition" data-competition="${escapeHtml(c.competition)}" ${q || hedgingOpenCompetitions.has(c.competition) ? 'open' : ''}>
         <summary class="hedge-competition-head">
           <span>${escapeHtml(c.competition || '(no competition)')}</span>
-          <small>${c.betCount} bet${c.betCount === 1 ? '' : 's'} · ${pnlMoney(c.stake)}</small>
         </summary>
         ${c.markets.map(m => `
           <div class="top-selection-row top-selection-row-clickable" data-competition="${escapeHtml(m.competition)}" data-market="${escapeHtml(m.market)}" role="button" tabindex="0">
