@@ -211,57 +211,6 @@ function computeFinalReturn(baseReturn, stake, freeBet, boostPercent) {
   return { rawReturn, finalReturn: applyBoost(rawReturn, stakeForBoost, boostPercent) };
 }
 
-// ---- P&L Tracker: a fully separate, manually-entered table (bookmaker x period) for bets
-// that never go through the accumulator tracker above (horse racing, small one-offs, etc).
-// Deliberately has no connection to `bets` — it's just its own little spreadsheet.
-
-const PNL_TRACKER_KEY = 'accaTracker.pnlTracker.v1';
-
-function loadPnlTracker() {
-  let raw = null;
-  try {
-    raw = localStorage.getItem(PNL_TRACKER_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    if (parsed !== null && (typeof parsed !== 'object' || Array.isArray(parsed))) throw new Error('Saved P&L Tracker is not an object');
-    return {
-      bookmakers: parsed?.bookmakers || [],
-      periods: parsed?.periods || [],
-      values: parsed?.values || {},
-    };
-  } catch (e) {
-    console.error('Failed to load P&L Tracker', e);
-    if (raw) keepUnreadableCopy(PNL_TRACKER_KEY, raw, 'P&L Tracker');
-    return { bookmakers: [], periods: [], values: {} };
-  }
-}
-
-function savePnlTracker() {
-  localStorage.setItem(PNL_TRACKER_KEY, JSON.stringify(pnlTracker));
-}
-
-let pnlTracker = loadPnlTracker();
-
-function pnlKey(bookmaker, period) {
-  return `${bookmaker}|||${period}`;
-}
-
-function pnlCellValue(bookmaker, period) {
-  const v = pnlTracker.values[pnlKey(bookmaker, period)];
-  return (v === undefined || v === null || v === '') ? null : Number(v);
-}
-
-function pnlRowTotal(bookmaker) {
-  return pnlTracker.periods.reduce((sum, p) => sum + (pnlCellValue(bookmaker, p) || 0), 0);
-}
-
-function pnlColumnTotal(period) {
-  return pnlTracker.bookmakers.reduce((sum, b) => sum + (pnlCellValue(b, period) || 0), 0);
-}
-
-function pnlGrandTotal() {
-  return pnlTracker.bookmakers.reduce((sum, b) => sum + pnlRowTotal(b), 0);
-}
-
 // Bookmakers aren't a fixed list — everyone uses a different set, so this just grows from
 // whatever the user has actually typed in before. Starts empty for a brand-new user/browser.
 function getKnownBookmakers() {
@@ -970,7 +919,7 @@ function renderHedgingMarketList() {
         ${c.markets.map(m => `
           <div class="top-selection-row top-selection-row-clickable" data-competition="${escapeHtml(m.competition)}" data-market="${escapeHtml(m.market)}" role="button" tabindex="0">
             <div class="top-selection-info"><b>${escapeHtml(m.market || '(no market)')}</b></div>
-            <span class="top-selection-count">${m.betCount} bet${m.betCount === 1 ? '' : 's'} · ${pnlMoney(m.stake)}</span>
+            <span class="top-selection-count">${m.betCount} bet${m.betCount === 1 ? '' : 's'} · ${moneyWithCommas(m.stake)}</span>
           </div>
         `).join('')}
       </details>
@@ -1017,7 +966,9 @@ function renderHedgingMarket(competition, market, selected) {
       isOther: true,
     });
   }
-  const current = shown.find(r => !r.isOther && r.selection === selected) || shown[0];
+  // Only highlighted when coming back from that selection's accumulators, so there's no
+  // misleading "selected" row on first opening.
+  const current = selected ? shown.find(r => !r.isOther && r.selection === selected) : null;
   const pct = (n) => (n / total * 100).toFixed(1);
 
   body.innerHTML = `
@@ -1026,10 +977,6 @@ function renderHedgingMarket(competition, market, selected) {
       <h3 class="hedge-question">Who else have you backed?</h3>
       <div class="hedge-market">${escapeHtml(competition || '(no competition)')} · ${escapeHtml(market || '(no market)')}</div>
       <p class="hedge-note">Figures beside each selection show the total stake on the open bets that include it. Click a selection to see its open accumulators.</p>
-      <div class="hedge-share">
-        <b>${pct(current.bets)}%</b>
-        <span>${escapeHtml(current.selection)}'s share of open bets in this market</span>
-      </div>
     </div>
     <div class="hedge-bar">
       ${shown.map(r => `<span class="hedge-bar-seg" style="width:${(r.bets / total * 100).toFixed(2)}%;background:${r.color}" title="${escapeHtml(r.selection)}: ${pct(r.bets)}%"></span>`).join('')}
@@ -1040,7 +987,7 @@ function renderHedgingMarket(competition, market, selected) {
           <span class="hedge-dot" style="background:${r.color}"></span>
           <span class="hedge-name">${escapeHtml(r.selection)}</span>
           <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%</span>
-          <span class="hedge-stake"><b>${pnlMoney(r.stake)}</b><small>staked</small></span>
+          <span class="hedge-stake"><b>${moneyWithCommas(r.stake)}</b><small>staked</small></span>
         </div>
       `).join('')}
     </div>
@@ -1070,7 +1017,7 @@ function renderHedgingSelectionBets(competition, market, selection) {
     <div class="hedge-selection-head">
       <b>${escapeHtml(selection)}</b>
       <span>${escapeHtml(competition || '(no competition)')} · ${escapeHtml(market || '(no market)')}</span>
-      ${row ? `<span>${row.bets} open bet${row.bets === 1 ? '' : 's'} · ${(row.bets / total * 100).toFixed(1)}% of the market · ${pnlMoney(row.stake)} staked</span>` : ''}
+      ${row ? `<span>${row.bets} open bet${row.bets === 1 ? '' : 's'} · ${(row.bets / total * 100).toFixed(1)}% of the market · ${moneyWithCommas(row.stake)} staked</span>` : ''}
     </div>
     <div id="hedging-bets-list"></div>
   `;
@@ -1090,180 +1037,13 @@ function openHedgingModal() {
   document.getElementById('hedging-backdrop').hidden = false;
 }
 
-// Renaming moves the entered figures across too (values are keyed by name, not position),
-// so nothing is lost by editing a bookmaker/column title in place instead of deleting and
-// re-adding it.
-function renamePnlBookmaker(oldName, newName) {
-  newName = newName.trim();
-  if (!newName || newName === oldName) return false;
-  if (pnlTracker.bookmakers.includes(newName)) { alert(`"${newName}" already exists.`); return false; }
-  const idx = pnlTracker.bookmakers.indexOf(oldName);
-  if (idx === -1) return false;
-  pnlTracker.bookmakers[idx] = newName;
-  pnlTracker.periods.forEach(p => {
-    const oldKey = pnlKey(oldName, p);
-    if (oldKey in pnlTracker.values) {
-      pnlTracker.values[pnlKey(newName, p)] = pnlTracker.values[oldKey];
-      delete pnlTracker.values[oldKey];
-    }
-  });
-  return true;
-}
-
-function renamePnlPeriod(oldName, newName) {
-  newName = newName.trim();
-  if (!newName || newName === oldName) return false;
-  if (pnlTracker.periods.includes(newName)) { alert(`"${newName}" already exists.`); return false; }
-  const idx = pnlTracker.periods.indexOf(oldName);
-  if (idx === -1) return false;
-  pnlTracker.periods[idx] = newName;
-  pnlTracker.bookmakers.forEach(bm => {
-    const oldKey = pnlKey(bm, oldName);
-    if (oldKey in pnlTracker.values) {
-      pnlTracker.values[pnlKey(bm, newName)] = pnlTracker.values[oldKey];
-      delete pnlTracker.values[oldKey];
-    }
-  });
-  return true;
-}
-
-function pnlMoney(n) {
+function moneyWithCommas(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return '—';
   const rounded = Math.round(Number(n) * 100) / 100;
   const fixed = Number.isInteger(rounded) ? Math.abs(rounded).toFixed(0) : Math.abs(rounded).toFixed(2);
   const [intPart, decPart] = fixed.split('.');
   const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return '£' + (rounded < 0 ? '-' : '') + withCommas + (decPart ? '.' + decPart : '');
-}
-
-function pnlCellHtml(val, extraClass) {
-  if (val === null) return `<td class="pnl-cell ${extraClass || ''}">—</td>`;
-  const cls = val > 0 ? 'pnl-pos' : val < 0 ? 'pnl-neg' : '';
-  return `<td class="pnl-cell ${cls} ${extraClass || ''}">${pnlMoney(val)}</td>`;
-}
-
-function renderPnlTable() {
-  const { bookmakers, periods } = pnlTracker;
-  const table = document.getElementById('pnl-table');
-
-  if (bookmakers.length === 0 && periods.length === 0) {
-    table.innerHTML = '<caption class="chart-empty">Add a bookmaker and a column below to get started.</caption>';
-    return;
-  }
-
-  let html = '<thead><tr><th class="pnl-corner"></th>';
-  periods.forEach((p, i) => {
-    html += `<th class="pnl-period-header"><div class="pnl-period-header-inner">
-      <input type="text" class="pnl-period-rename" data-index="${i}" value="${escapeHtml(p)}">
-      <button type="button" class="pnl-remove-period" data-index="${i}" title="Remove column">&times;</button>
-    </div></th>`;
-  });
-  html += '<th class="pnl-overall-header">Overall P/L</th></tr></thead><tbody>';
-
-  bookmakers.forEach((bm, bi) => {
-    html += `<tr><th class="pnl-row-header">
-      <input type="text" class="pnl-row-rename" data-index="${bi}" value="${escapeHtml(bm)}">
-      <span class="pnl-row-actions">
-        <button type="button" class="pnl-move-bookmaker" data-index="${bi}" data-dir="up" title="Move up" ${bi === 0 ? 'disabled' : ''}>▲</button>
-        <button type="button" class="pnl-move-bookmaker" data-index="${bi}" data-dir="down" title="Move down" ${bi === bookmakers.length - 1 ? 'disabled' : ''}>▼</button>
-        <button type="button" class="pnl-remove-bookmaker" data-index="${bi}" title="Remove row">&times;</button>
-      </span>
-    </th>`;
-    periods.forEach(p => {
-      const val = pnlCellValue(bm, p);
-      html += `<td class="pnl-input-cell"><input type="number" step="0.01" class="pnl-input" data-bookmaker="${escapeHtml(bm)}" data-period="${escapeHtml(p)}" value="${val === null ? '' : val}"></td>`;
-    });
-    html += pnlCellHtml(pnlRowTotal(bm), 'pnl-overall-cell');
-    html += '</tr>';
-  });
-
-  html += `<tr class="pnl-totals-row"><th>Overall P/L</th>`;
-  periods.forEach(p => { html += pnlCellHtml(pnlColumnTotal(p)); });
-  html += pnlCellHtml(pnlGrandTotal(), 'pnl-overall-cell');
-  html += '</tr></tbody>';
-
-  table.innerHTML = html;
-
-  table.querySelectorAll('.pnl-input').forEach(input => {
-    input.addEventListener('change', () => {
-      const key = pnlKey(input.dataset.bookmaker, input.dataset.period);
-      if (input.value === '') {
-        delete pnlTracker.values[key];
-      } else {
-        pnlTracker.values[key] = Number(input.value);
-      }
-      savePnlTracker();
-      renderPnlTable();
-    });
-  });
-
-  table.querySelectorAll('.pnl-move-bookmaker').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = Number(btn.dataset.index);
-      const j = i + (btn.dataset.dir === 'up' ? -1 : 1);
-      if (j < 0 || j >= pnlTracker.bookmakers.length) return;
-      [pnlTracker.bookmakers[i], pnlTracker.bookmakers[j]] = [pnlTracker.bookmakers[j], pnlTracker.bookmakers[i]];
-      savePnlTracker();
-      renderPnlTable();
-    });
-  });
-
-  table.querySelectorAll('.pnl-remove-bookmaker').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const bm = pnlTracker.bookmakers[Number(btn.dataset.index)];
-      if (!confirm(`Remove "${bm}" and all its entered figures?`)) return;
-      pnlTracker.bookmakers.splice(Number(btn.dataset.index), 1);
-      pnlTracker.periods.forEach(p => delete pnlTracker.values[pnlKey(bm, p)]);
-      savePnlTracker();
-      renderPnlTable();
-    });
-  });
-
-  table.querySelectorAll('.pnl-remove-period').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const p = pnlTracker.periods[Number(btn.dataset.index)];
-      if (!confirm(`Remove the "${p}" column and all its entered figures?`)) return;
-      pnlTracker.periods.splice(Number(btn.dataset.index), 1);
-      pnlTracker.bookmakers.forEach(bm => delete pnlTracker.values[pnlKey(bm, p)]);
-      savePnlTracker();
-      renderPnlTable();
-    });
-  });
-
-  table.querySelectorAll('.pnl-row-rename').forEach(input => {
-    const commit = () => {
-      const oldName = pnlTracker.bookmakers[Number(input.dataset.index)];
-      if (input.value.trim() === oldName) { input.value = oldName; return; }
-      if (renamePnlBookmaker(oldName, input.value)) {
-        savePnlTracker();
-        renderPnlTable();
-      } else {
-        input.value = oldName;
-      }
-    };
-    input.addEventListener('change', commit);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
-  });
-
-  table.querySelectorAll('.pnl-period-rename').forEach(input => {
-    const commit = () => {
-      const oldName = pnlTracker.periods[Number(input.dataset.index)];
-      if (input.value.trim() === oldName) { input.value = oldName; return; }
-      if (renamePnlPeriod(oldName, input.value)) {
-        savePnlTracker();
-        renderPnlTable();
-      } else {
-        input.value = oldName;
-      }
-    };
-    input.addEventListener('change', commit);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
-  });
-}
-
-function openPnlTrackerModal() {
-  renderPnlTable();
-  document.getElementById('pnl-tracker-backdrop').hidden = false;
 }
 
 function renderBetsList() {
@@ -2292,37 +2072,6 @@ document.getElementById('btn-close-hedging').addEventListener('click', () => {
   document.getElementById('hedging-backdrop').hidden = true;
 });
 
-document.getElementById('btn-pnl-tracker').addEventListener('click', openPnlTrackerModal);
-document.getElementById('btn-close-pnl-tracker').addEventListener('click', () => {
-  document.getElementById('pnl-tracker-backdrop').hidden = true;
-});
-document.getElementById('btn-pnl-add-bookmaker').addEventListener('click', () => {
-  const input = document.getElementById('pnl-new-bookmaker');
-  const name = input.value.trim();
-  if (!name) { alert('Enter a bookmaker name first.'); input.focus(); return; }
-  if (pnlTracker.bookmakers.includes(name)) { alert(`"${name}" is already in the table.`); input.focus(); return; }
-  pnlTracker.bookmakers.push(name);
-  savePnlTracker();
-  input.value = '';
-  renderPnlTable();
-});
-document.getElementById('pnl-new-bookmaker').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-pnl-add-bookmaker').click(); }
-});
-document.getElementById('btn-pnl-add-period').addEventListener('click', () => {
-  const input = document.getElementById('pnl-new-period');
-  const name = input.value.trim();
-  if (!name) { alert('Enter a column name first.'); input.focus(); return; }
-  if (pnlTracker.periods.includes(name)) { alert(`"${name}" is already in the table.`); input.focus(); return; }
-  pnlTracker.periods.push(name);
-  savePnlTracker();
-  input.value = '';
-  renderPnlTable();
-});
-document.getElementById('pnl-new-period').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-pnl-add-period').click(); }
-});
-
 document.getElementById('btn-close-modal').addEventListener('click', closeModalWithConfirm);
 document.getElementById('btn-modal-back').addEventListener('click', closeModalWithConfirm);
 document.getElementById('btn-cancel').addEventListener('click', closeModalWithConfirm);
@@ -2406,14 +2155,13 @@ function renderBackupReminder() {
   try { snoozedToday = localStorage.getItem(BACKUP_SNOOZE_KEY) === new Date().toISOString().slice(0, 10); } catch (e) {}
   const overdue = days === null || days >= BACKUP_MAX_AGE_DAYS;
   document.getElementById('backup-banner-text').textContent = days === null
-    ? "You haven't exported a backup yet. Your bets and P&L Tracker only exist in this browser."
+    ? "You haven't exported a backup yet. Your bets only exist in this browser."
     : `Your last backup was ${days} days ago. Export a fresh one to keep your history safe.`;
   document.getElementById('backup-banner').hidden = !(overdue && !snoozedToday);
 }
 
-// The backup holds everything — bets and the P&L Tracker — in one file.
 function exportBackup() {
-  const payload = { app: 'acca-tracker', version: 2, exportedAt: new Date().toISOString(), bets, pnlTracker };
+  const payload = { app: 'acca-tracker', version: 2, exportedAt: new Date().toISOString(), bets };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2443,12 +2191,10 @@ document.getElementById('import-file').addEventListener('change', (e) => {
   reader.onload = () => {
     try {
       const parsed = JSON.parse(reader.result);
-      // Older backups are just a list of bets; newer ones also carry the P&L Tracker.
+      // Older backups are just a list of bets; newer ones wrap the list in an object (and
+      // backups made while the P&L Tracker existed also carry its data, which is ignored).
       const imported = Array.isArray(parsed) ? parsed : parsed?.bets;
       if (!Array.isArray(imported)) throw new Error('Invalid file format');
-      const importedPnl = Array.isArray(parsed) ? null : parsed?.pnlTracker;
-      const pnlIsValid = importedPnl && Array.isArray(importedPnl.bookmakers) && Array.isArray(importedPnl.periods)
-        && importedPnl.values && typeof importedPnl.values === 'object';
       const mode = confirm(
         `Import ${imported.length} bet(s).\n\nOK = merge with existing bets\nCancel = replace all existing bets`
       );
@@ -2462,13 +2208,6 @@ document.getElementById('import-file').addEventListener('change', (e) => {
         bets = imported;
       }
       saveBets();
-      if (pnlIsValid) {
-        const currentHasPnl = pnlTracker.bookmakers.length > 0 || pnlTracker.periods.length > 0;
-        if (!currentHasPnl || confirm('This backup also contains a P&L Tracker.\n\nOK = replace your current P&L Tracker with it\nCancel = keep your current P&L Tracker')) {
-          pnlTracker = { bookmakers: importedPnl.bookmakers, periods: importedPnl.periods, values: importedPnl.values };
-          savePnlTracker();
-        }
-      }
       render();
     } catch (err) {
       alert('Could not import file: ' + err.message);
