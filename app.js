@@ -901,8 +901,9 @@ function getHedgingCompetitions() {
       const c = competitions[compName];
       if (!c.betIds.has(b.id)) { c.betIds.add(b.id); c.stake += stakeCost(b); }
       const marketName = s.market || '';
-      if (!c.markets[marketName]) c.markets[marketName] = { competition: compName, market: marketName, betIds: new Set(), stake: 0 };
+      if (!c.markets[marketName]) c.markets[marketName] = { competition: compName, market: marketName, betIds: new Set(), selectionNames: new Set(), stake: 0 };
       const m = c.markets[marketName];
+      m.selectionNames.add(s.selection);
       if (!m.betIds.has(b.id)) { m.betIds.add(b.id); m.stake += stakeCost(b); }
     });
   });
@@ -912,7 +913,7 @@ function getHedgingCompetitions() {
     betCount: c.betIds.size,
     stake: c.stake,
     markets: Object.values(c.markets)
-      .map(m => ({ competition: m.competition, market: m.market, betCount: m.betIds.size, stake: m.stake }))
+      .map(m => ({ competition: m.competition, market: m.market, betCount: m.betIds.size, selectionCount: m.selectionNames.size, stake: m.stake }))
       .sort(bySize),
   })).sort(bySize);
 }
@@ -938,19 +939,20 @@ function getHedgingBreakdown(competition, market) {
 function renderHedgingMarketList() {
   document.getElementById('btn-hedging-back').hidden = true;
   document.getElementById('hedging-title').textContent = 'Hedging';
-  // Only markets with at least HEDGE_MIN_BETS open bets are worth hedging against, so smaller
-  // ones are left out everywhere (including the filter); competitions left with none vanish.
+  // Hedging only makes sense where you've backed more than one selection in a market, and
+  // only busy markets (HEDGE_MIN_BETS+ open bets) are worth tracking, so everything else is
+  // left out everywhere (including the filter); competitions left with none vanish.
   const competitions = getHedgingCompetitions()
-    .map(c => ({ ...c, markets: c.markets.filter(m => m.betCount >= HEDGE_MIN_BETS) }))
+    .map(c => ({ ...c, markets: c.markets.filter(m => m.betCount >= HEDGE_MIN_BETS && m.selectionCount >= 2) }))
     .filter(c => c.markets.length > 0);
   const body = document.getElementById('hedging-body');
   if (competitions.length === 0) {
-    body.innerHTML = `<p class="chart-empty">No markets with ${HEDGE_MIN_BETS}+ open bets yet.</p>`;
+    body.innerHTML = `<p class="chart-empty">No markets with ${HEDGE_MIN_BETS}+ open bets across more than one selection yet.</p>`;
     return;
   }
   const hiddenCount = Math.max(0, competitions.length - HEDGE_TOP_COMPETITIONS);
   body.innerHTML = `
-    <p class="hedge-note">Pick a market to see who else you've backed in it. Markets with ${HEDGE_MIN_BETS}+ open bets only.${hiddenCount > 0 ? ` Showing your top ${HEDGE_TOP_COMPETITIONS} competitions — use the filter to find the other ${hiddenCount}.` : ''}</p>
+    <p class="hedge-note">Pick a market to see who else you've backed in it. Only markets with ${HEDGE_MIN_BETS}+ open bets across more than one selection are shown.${hiddenCount > 0 ? ` Showing your top ${HEDGE_TOP_COMPETITIONS} competitions — use the filter to find the other ${hiddenCount}.` : ''}</p>
     <input type="text" id="hedging-search" class="hedging-search" placeholder="Filter markets...">
     <div id="hedging-market-list"></div>
   `;
