@@ -7,6 +7,8 @@ const PAGE_SIZE = 20;
 // Set when the Add/Edit modal is opened from a Top Selections drill-down row, so closing,
 // saving, or deleting that bet drops back into the same drill-down list instead of just closing.
 let topSelectionsReturnContext = null;
+// Same idea for the Hedging view: set when a bet is opened from a selection's accumulator list there.
+let hedgingReturnContext = null;
 // True once the user has actually changed something in the open Add/Edit form — reset each
 // time the modal opens, so Cancel/X can warn before discarding in-progress work.
 let modalDirty = false;
@@ -812,7 +814,15 @@ function renderTopSelectionsDrilldown(selection, market, competition) {
   document.getElementById('btn-top-selections-back').hidden = false;
   document.getElementById('top-selections-title').textContent = selection;
   const matches = getOpenBetsForSelection(selection, market, competition);
-  const container = document.getElementById('top-selections-list');
+  renderDrilldownBets(document.getElementById('top-selections-list'), matches, (bet) => {
+    document.getElementById('top-selections-backdrop').hidden = true;
+    openModal(bet, { fromTopSelections: { selection, market, competition } });
+  });
+}
+
+// Shared by Top Selections and Hedging: lists the given bets as rows that expand to show the
+// whole accumulator, each with an Edit button that calls `onEdit(bet)`.
+function renderDrilldownBets(container, matches, onEdit) {
   container.innerHTML = matches.map(b => `
     <div class="drilldown-bet-block">
       <div class="drilldown-bet-row" data-id="${b.id}" role="button" tabindex="0">
@@ -848,8 +858,7 @@ function renderTopSelectionsDrilldown(selection, market, competition) {
       e.stopPropagation();
       const bet = bets.find(b => b.id === btn.dataset.id);
       if (!bet) return;
-      document.getElementById('top-selections-backdrop').hidden = true;
-      openModal(bet, { fromTopSelections: { selection, market, competition } });
+      onEdit(bet);
     });
   });
 }
@@ -866,6 +875,8 @@ const HEDGE_TOP_N = 7;
 const HEDGE_TOP_COMPETITIONS = 10;
 const HEDGE_MIN_BETS = 10;
 const hedgingOpenCompetitions = new Set();
+// What the ‹ arrow does from the current Hedging screen (market -> list, accumulators -> market).
+let hedgingBackAction = null;
 
 // Only selections that are still undecided count: a leg already ticked won/placed/lost has
 // finished, and void legs are ignored, so a finished market never shows up as something you're
@@ -1015,7 +1026,7 @@ function renderHedgingMarket(competition, market, selected) {
       <div class="hedge-eyebrow">Hedging context</div>
       <h3 class="hedge-question">Who else have you backed?</h3>
       <div class="hedge-market">${escapeHtml(competition || '(no competition)')} · ${escapeHtml(market || '(no market)')}</div>
-      <p class="hedge-note">Figures beside each selection show the total stake on the open bets that include it. Click a selection to see its share.</p>
+      <p class="hedge-note">Figures beside each selection show the total stake on the open bets that include it. Click a selection to see its open accumulators.</p>
       <div class="hedge-share">
         <b>${pct(current.bets)}%</b>
         <span>${escapeHtml(current.selection)}'s share of open bets in this market</span>
@@ -1036,10 +1047,42 @@ function renderHedgingMarket(competition, market, selected) {
     </div>
   `;
 
+  hedgingBackAction = renderHedgingMarketList;
   body.querySelectorAll('.hedge-row-clickable').forEach(row => {
-    const activate = () => renderHedgingMarket(competition, market, row.dataset.selection);
+    const activate = () => renderHedgingSelectionBets(competition, market, row.dataset.selection);
     row.addEventListener('click', activate);
     row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
+  });
+}
+
+// The open accumulators behind one selection's row, in the same expandable list Top Selections
+// uses. Matches the counts on the Hedging rows: only bets where that leg is still undecided.
+function renderHedgingSelectionBets(competition, market, selection) {
+  document.getElementById('btn-hedging-back').hidden = false;
+  document.getElementById('hedging-title').textContent = 'Hedging';
+  hedgingBackAction = () => renderHedgingMarket(competition, market, selection);
+  const matches = bets.filter(b => b.status === 'open' && (b.selections || []).some(s =>
+    isUndecidedSelection(s) && s.selection === selection && (s.competition || '') === competition && (s.market || '') === market
+  ));
+  const row = getHedgingBreakdown(competition, market).find(r => r.selection === selection);
+  const total = getHedgingBreakdown(competition, market).reduce((sum, r) => sum + r.bets, 0);
+  const body = document.getElementById('hedging-body');
+  body.innerHTML = `
+    <div class="hedge-selection-head">
+      <b>${escapeHtml(selection)}</b>
+      <span>${escapeHtml(competition || '(no competition)')} · ${escapeHtml(market || '(no market)')}</span>
+      ${row ? `<span>${row.bets} open bet${row.bets === 1 ? '' : 's'} · ${(row.bets / total * 100).toFixed(1)}% of the market · ${pnlMoney(row.stake)} staked</span>` : ''}
+    </div>
+    <div id="hedging-bets-list"></div>
+  `;
+  const list = document.getElementById('hedging-bets-list');
+  if (matches.length === 0) {
+    list.innerHTML = '<p class="chart-empty">No open bets include this selection any more.</p>';
+    return;
+  }
+  renderDrilldownBets(list, matches, (bet) => {
+    document.getElementById('hedging-backdrop').hidden = true;
+    openModal(bet, { fromHedging: { competition, market, selection } });
   });
 }
 
@@ -1412,7 +1455,8 @@ const selectionsEditor = document.getElementById('selections-editor');
 
 function openModal(bet, options = {}) {
   topSelectionsReturnContext = options.fromTopSelections || null;
-  document.getElementById('btn-modal-back').hidden = !options.fromTopSelections;
+  hedgingReturnContext = options.fromHedging || null;
+  document.getElementById('btn-modal-back').hidden = !options.fromTopSelections && !options.fromHedging;
   const isDuplicate = options.duplicate === true;
   betForm.reset();
 
@@ -1480,6 +1524,12 @@ function closeModal() {
     topSelectionsReturnContext = null;
     renderTopSelectionsDrilldown(selection, market, competition);
     document.getElementById('top-selections-backdrop').hidden = false;
+  }
+  if (hedgingReturnContext) {
+    const { competition, market, selection } = hedgingReturnContext;
+    hedgingReturnContext = null;
+    renderHedgingSelectionBets(competition, market, selection);
+    document.getElementById('hedging-backdrop').hidden = false;
   }
 }
 
@@ -2236,7 +2286,9 @@ document.getElementById('btn-close-top-selections').addEventListener('click', ()
 });
 
 document.getElementById('btn-hedging').addEventListener('click', openHedgingModal);
-document.getElementById('btn-hedging-back').addEventListener('click', renderHedgingMarketList);
+document.getElementById('btn-hedging-back').addEventListener('click', () => {
+  if (hedgingBackAction) hedgingBackAction();
+});
 document.getElementById('btn-close-hedging').addEventListener('click', () => {
   document.getElementById('hedging-backdrop').hidden = true;
 });
