@@ -867,20 +867,33 @@ const HEDGE_TOP_N = 7;
 // Like Top Selections, this looks at every OPEN bet regardless of the current filters, and
 // ignores void selections. A "market" is a competition + market pair, e.g. "UEFA Champions
 // League 2026/27 · Top goalscorer". Stakes are money at risk, so free bets count as £0.
-function getHedgingMarkets() {
-  const markets = {};
+// Returned grouped by competition (e.g. "English Premier League"), biggest first, each with
+// its markets biggest first. Competition totals count each bet once, even if it has several
+// selections in that competition.
+function getHedgingCompetitions() {
+  const competitions = {};
   bets.filter(b => b.status === 'open').forEach(b => {
     (b.selections || []).forEach(s => {
       if (s.void || !s.selection) return;
-      const key = `${s.competition || ''}|||${s.market || ''}`;
-      if (!markets[key]) markets[key] = { competition: s.competition || '', market: s.market || '', betIds: new Set(), stake: 0 };
-      const m = markets[key];
+      const compName = s.competition || '';
+      if (!competitions[compName]) competitions[compName] = { competition: compName, betIds: new Set(), stake: 0, markets: {} };
+      const c = competitions[compName];
+      if (!c.betIds.has(b.id)) { c.betIds.add(b.id); c.stake += stakeCost(b); }
+      const marketName = s.market || '';
+      if (!c.markets[marketName]) c.markets[marketName] = { competition: compName, market: marketName, betIds: new Set(), stake: 0 };
+      const m = c.markets[marketName];
       if (!m.betIds.has(b.id)) { m.betIds.add(b.id); m.stake += stakeCost(b); }
     });
   });
-  return Object.values(markets)
-    .map(m => ({ competition: m.competition, market: m.market, betCount: m.betIds.size, stake: m.stake }))
-    .sort((a, b) => b.betCount - a.betCount || b.stake - a.stake);
+  const bySize = (a, b) => b.betCount - a.betCount || b.stake - a.stake;
+  return Object.values(competitions).map(c => ({
+    competition: c.competition,
+    betCount: c.betIds.size,
+    stake: c.stake,
+    markets: Object.values(c.markets)
+      .map(m => ({ competition: m.competition, market: m.market, betCount: m.betIds.size, stake: m.stake }))
+      .sort(bySize),
+  })).sort(bySize);
 }
 
 // One row per selection in the market: how many open bets include it, and the combined stake
@@ -904,9 +917,9 @@ function getHedgingBreakdown(competition, market) {
 function renderHedgingMarketList() {
   document.getElementById('btn-hedging-back').hidden = true;
   document.getElementById('hedging-title').textContent = 'Hedging';
-  const markets = getHedgingMarkets();
+  const competitions = getHedgingCompetitions();
   const body = document.getElementById('hedging-body');
-  if (markets.length === 0) {
+  if (competitions.length === 0) {
     body.innerHTML = '<p class="chart-empty">No open bets yet.</p>';
     return;
   }
@@ -918,14 +931,21 @@ function renderHedgingMarketList() {
   const list = document.getElementById('hedging-market-list');
   const fill = () => {
     const q = document.getElementById('hedging-search').value.trim().toLowerCase();
-    const shown = markets.filter(m => !q || `${m.market} ${m.competition}`.toLowerCase().includes(q));
-    list.innerHTML = shown.length === 0 ? '<p class="chart-empty">No markets match.</p>' : shown.map(m => `
-      <div class="top-selection-row top-selection-row-clickable" data-competition="${escapeHtml(m.competition)}" data-market="${escapeHtml(m.market)}" role="button" tabindex="0">
-        <div class="top-selection-info">
-          <b>${escapeHtml(m.market || '(no market)')}</b>
-          <span class="chip-market">${escapeHtml(m.competition || '(no competition)')}</span>
+    const groups = competitions
+      .map(c => ({ ...c, markets: c.markets.filter(m => !q || `${m.market} ${m.competition}`.toLowerCase().includes(q)) }))
+      .filter(c => c.markets.length > 0);
+    list.innerHTML = groups.length === 0 ? '<p class="chart-empty">No markets match.</p>' : groups.map(c => `
+      <div class="hedge-competition">
+        <div class="hedge-competition-head">
+          <span>${escapeHtml(c.competition || '(no competition)')}</span>
+          <small>${c.betCount} bet${c.betCount === 1 ? '' : 's'} · ${pnlMoney(c.stake)}</small>
         </div>
-        <span class="top-selection-count">${m.betCount} bet${m.betCount === 1 ? '' : 's'} · ${pnlMoney(m.stake)}</span>
+        ${c.markets.map(m => `
+          <div class="top-selection-row top-selection-row-clickable" data-competition="${escapeHtml(m.competition)}" data-market="${escapeHtml(m.market)}" role="button" tabindex="0">
+            <div class="top-selection-info"><b>${escapeHtml(m.market || '(no market)')}</b></div>
+            <span class="top-selection-count">${m.betCount} bet${m.betCount === 1 ? '' : 's'} · ${pnlMoney(m.stake)}</span>
+          </div>
+        `).join('')}
       </div>
     `).join('');
     list.querySelectorAll('.top-selection-row-clickable').forEach(row => {

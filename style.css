@@ -413,6 +413,21 @@ body {
   color: var(--text);
   font-size: 14px;
 }
+.hedge-competition { margin-top: 14px; }
+.hedge-competition-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 2px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+.hedge-competition-head small { font-weight: 600; letter-spacing: normal; text-transform: none; color: var(--text-muted); white-space: nowrap; }
 .hedge-note { font-size: 12.5px; color: var(--text-muted); margin: 6px 0 10px; }
 .hedge-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-text); }
 .hedge-question { margin: 6px 0 4px; font-size: 21px; text-transform: none; letter-spacing: normal; color: var(--text); }
