@@ -866,9 +866,16 @@ const HEDGE_TOP_N = 7;
 const HEDGE_TOP_COMPETITIONS = 10;
 const hedgingOpenCompetitions = new Set();
 
-// Like Top Selections, this looks at every OPEN bet regardless of the current filters, and
-// ignores void selections. A "market" is a competition + market pair, e.g. "UEFA Champions
-// League 2026/27 · Top goalscorer". Stakes are money at risk, so free bets count as £0.
+// Only selections that are still undecided count: a leg already ticked won/placed/lost has
+// finished, and void legs are ignored, so a finished market never shows up as something you're
+// still exposed to.
+function isUndecidedSelection(s) {
+  return !s.void && !!s.selection && (!s.result || s.result === 'pending');
+}
+
+// Like Top Selections, this looks at every OPEN bet regardless of the current filters. A
+// "market" is a competition + market pair, e.g. "UEFA Champions League 2026/27 · Top
+// goalscorer". Stakes are money at risk, so free bets count as £0.
 // Returned grouped by competition (e.g. "English Premier League"), biggest first, each with
 // its markets biggest first. Competition totals count each bet once, even if it has several
 // selections in that competition.
@@ -876,7 +883,7 @@ function getHedgingCompetitions() {
   const competitions = {};
   bets.filter(b => b.status === 'open').forEach(b => {
     (b.selections || []).forEach(s => {
-      if (s.void || !s.selection) return;
+      if (!isUndecidedSelection(s)) return;
       const compName = s.competition || '';
       if (!competitions[compName]) competitions[compName] = { competition: compName, betIds: new Set(), stake: 0, markets: {} };
       const c = competitions[compName];
@@ -905,7 +912,7 @@ function getHedgingBreakdown(competition, market) {
   bets.filter(b => b.status === 'open').forEach(b => {
     const counted = new Set();
     (b.selections || []).forEach(s => {
-      if (s.void || !s.selection || (s.competition || '') !== competition || (s.market || '') !== market) return;
+      if (!isUndecidedSelection(s) || (s.competition || '') !== competition || (s.market || '') !== market) return;
       if (counted.has(s.selection)) return;
       counted.add(s.selection);
       if (!bySelection[s.selection]) bySelection[s.selection] = { selection: s.selection, bets: 0, stake: 0 };
