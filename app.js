@@ -1158,6 +1158,7 @@ function renderBetsList() {
       if (!sel) return;
       const states = targetBet.betType === 'each-way' ? ['pending', 'won', 'placed', 'lost'] : ['pending', 'won', 'lost'];
       const nextIndex = (states.indexOf(sel.result || 'pending') + 1) % states.length;
+      const wasLost = sel.result === 'lost';
       sel.result = states[nextIndex];
 
       // A single lost leg kills the whole accumulator outright, so settle the bet as lost the
@@ -1165,7 +1166,12 @@ function renderBetsList() {
       // opposite outcome. Checked first since one lost leg overrides any other result.
       // Only open bets get auto-settled — ticking a lost bet's other selections is just
       // record-keeping and must never change its status or return.
-      if (targetBet.status !== 'open') {
+      if (targetBet.status === 'lost' && wasLost && !targetBet.selections.some(s => s.result === 'lost')) {
+        // The lost selection has been un-ticked and no other leg is lost, so the bet is no longer
+        // dead — put it back to open and clear the 0 return that settling as lost gave it.
+        targetBet.status = 'open';
+        if (Number(targetBet.actualReturn) === 0) targetBet.actualReturn = null;
+      } else if (targetBet.status !== 'open') {
         // leave status and return as they are
       } else if (targetBet.selections.some(s => s.result === 'lost')) {
         targetBet.status = 'lost';
