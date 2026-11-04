@@ -1058,6 +1058,9 @@ function renderHedgingSelectionBets(competition, market, selection) {
 }
 
 function openHedgingModal() {
+  // Opening Hedging afresh starts with every competition collapsed. (Going into a market and
+  // back keeps them as they were, since that doesn't come through here.)
+  hedgingOpenCompetitions.clear();
   renderHedgingMarketList();
   document.getElementById('hedging-backdrop').hidden = false;
 }
