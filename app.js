@@ -822,6 +822,30 @@ function openTopSelectionsModal() {
 const HEDGE_COLORS = ['#6fb0c9', '#c98d79', '#f0c93a', '#a597cf', '#7bc79a', '#e08a8a', '#8fa0d6'];
 const HEDGE_TOP_N = 7;
 const HEDGE_MIN_BETS = 10;
+// The order competitions are listed in. A competition matches an entry if its name starts with
+// it (so "UEFA Champions League 2026/27" still lands on "UEFA Champions League"); anything not
+// listed follows, busiest first.
+const HEDGE_COMPETITION_ORDER = [
+  'English Premier League',
+  'English Championship',
+  'English League 1',
+  'English League 2',
+  'English National League',
+  'Scottish Premiership',
+  'Scottish Championship',
+  'Scottish League 2',
+  'La Liga',
+  'Serie A',
+  'Ligue 1',
+  'UEFA Champions League',
+  'UEFA Europa League',
+];
+
+function hedgeCompetitionRank(name) {
+  const lower = (name || '').trim().toLowerCase();
+  const idx = HEDGE_COMPETITION_ORDER.findIndex(entry => lower.startsWith(entry.toLowerCase()));
+  return idx === -1 ? HEDGE_COMPETITION_ORDER.length : idx;
+}
 const hedgingOpenCompetitions = new Set();
 // What the ‹ arrow does from the current Hedging screen (market -> list, accumulators -> market).
 let hedgingBackAction = null;
@@ -892,7 +916,8 @@ function renderHedgingMarketList() {
   // left out everywhere (including the filter); competitions left with none vanish.
   const competitions = getHedgingCompetitions()
     .map(c => ({ ...c, markets: c.markets.filter(m => m.betCount >= HEDGE_MIN_BETS && m.selectionCount >= 2) }))
-    .filter(c => c.markets.length > 0);
+    .filter(c => c.markets.length > 0)
+    .sort((a, b) => hedgeCompetitionRank(a.competition) - hedgeCompetitionRank(b.competition));
   const body = document.getElementById('hedging-body');
   if (competitions.length === 0) {
     body.innerHTML = `<p class="chart-empty">No markets with ${HEDGE_MIN_BETS}+ open bets across more than one selection yet.</p>`;
