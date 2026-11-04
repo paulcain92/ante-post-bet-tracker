@@ -864,6 +864,7 @@ function openTopSelectionsModal() {
 const HEDGE_COLORS = ['#6fb0c9', '#c98d79', '#f0c93a', '#a597cf', '#7bc79a', '#e08a8a', '#8fa0d6'];
 const HEDGE_TOP_N = 7;
 const HEDGE_TOP_COMPETITIONS = 10;
+const HEDGE_MIN_BETS = 10;
 const hedgingOpenCompetitions = new Set();
 
 // Only selections that are still undecided count: a leg already ticked won/placed/lost has
@@ -926,15 +927,19 @@ function getHedgingBreakdown(competition, market) {
 function renderHedgingMarketList() {
   document.getElementById('btn-hedging-back').hidden = true;
   document.getElementById('hedging-title').textContent = 'Hedging';
-  const competitions = getHedgingCompetitions();
+  // Only markets with at least HEDGE_MIN_BETS open bets are worth hedging against, so smaller
+  // ones are left out everywhere (including the filter); competitions left with none vanish.
+  const competitions = getHedgingCompetitions()
+    .map(c => ({ ...c, markets: c.markets.filter(m => m.betCount >= HEDGE_MIN_BETS) }))
+    .filter(c => c.markets.length > 0);
   const body = document.getElementById('hedging-body');
   if (competitions.length === 0) {
-    body.innerHTML = '<p class="chart-empty">No open bets yet.</p>';
+    body.innerHTML = `<p class="chart-empty">No markets with ${HEDGE_MIN_BETS}+ open bets yet.</p>`;
     return;
   }
   const hiddenCount = Math.max(0, competitions.length - HEDGE_TOP_COMPETITIONS);
   body.innerHTML = `
-    <p class="hedge-note">Pick a market to see who else you've backed in it. Open bets only.${hiddenCount > 0 ? ` Showing your top ${HEDGE_TOP_COMPETITIONS} competitions — use the filter to find the other ${hiddenCount}.` : ''}</p>
+    <p class="hedge-note">Pick a market to see who else you've backed in it. Markets with ${HEDGE_MIN_BETS}+ open bets only.${hiddenCount > 0 ? ` Showing your top ${HEDGE_TOP_COMPETITIONS} competitions — use the filter to find the other ${hiddenCount}.` : ''}</p>
     <input type="text" id="hedging-search" class="hedging-search" placeholder="Filter markets...">
     <div id="hedging-market-list"></div>
   `;
