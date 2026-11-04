@@ -974,7 +974,7 @@ function renderHedgingMarket(competition, market, selected) {
   body.innerHTML = `
     <div class="hedge-head">
       <div class="hedge-eyebrow">Hedging context</div>
-      <h3 class="hedge-question">Who else have you backed?</h3>
+      <h3 class="hedge-question">Who have you backed?</h3>
       <div class="hedge-market">${escapeHtml(competition || '(no competition)')} · ${escapeHtml(market || '(no market)')}</div>
       <p class="hedge-note">Figures beside each selection show the total stake on the open bets that include it. Click a selection to see its open accumulators.</p>
     </div>
