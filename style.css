@@ -403,6 +403,45 @@ body {
 .top-selection-row-clickable { cursor: pointer; }
 .top-selection-row-clickable:hover { background: var(--bg); border-radius: 8px; }
 
+.hedging-search {
+  width: 100%;
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+.hedge-note { font-size: 12.5px; color: var(--text-muted); margin: 6px 0 10px; }
+.hedge-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-text); }
+.hedge-question { margin: 6px 0 4px; font-size: 21px; text-transform: none; letter-spacing: normal; color: var(--text); }
+.hedge-market { font-size: 12.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.hedge-share { text-align: right; margin: 6px 0 12px; }
+.hedge-share b { display: block; font-size: 34px; line-height: 1.1; color: var(--accent-text); }
+.hedge-share span { font-size: 12px; color: var(--text-muted); }
+.hedge-bar { display: flex; gap: 2px; height: 14px; border-radius: 999px; overflow: hidden; margin-bottom: 14px; }
+.hedge-bar-seg { display: block; height: 100%; min-width: 2px; }
+.hedge-rows { display: flex; flex-direction: column; gap: 8px; }
+.hedge-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.hedge-row-clickable { cursor: pointer; }
+.hedge-row-clickable:hover { border-color: var(--accent); }
+.hedge-row.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.hedge-dot { flex-shrink: 0; width: 11px; height: 11px; border-radius: 50%; }
+.hedge-name { flex: 1; min-width: 0; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; overflow: hidden; text-overflow: ellipsis; }
+.hedge-count { flex-shrink: 0; font-size: 12.5px; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+.hedge-stake { flex-shrink: 0; min-width: 96px; text-align: right; display: flex; flex-direction: column; }
+.hedge-stake b { font-size: 16px; color: var(--accent-text); }
+.hedge-stake small { font-size: 11px; color: var(--text-muted); }
+
 .drilldown-bet-block { border-bottom: 1px solid var(--border); }
 .drilldown-bet-block:last-child { border-bottom: none; }
 .drilldown-bet-row {

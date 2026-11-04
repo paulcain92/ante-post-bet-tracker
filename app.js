@@ -859,6 +859,149 @@ function openTopSelectionsModal() {
   document.getElementById('top-selections-backdrop').hidden = false;
 }
 
+// ---------- Hedging: who else have you backed in the same market? ----------
+
+const HEDGE_COLORS = ['#6fb0c9', '#c98d79', '#f0c93a', '#a597cf', '#7bc79a', '#e08a8a', '#8fa0d6'];
+const HEDGE_TOP_N = 7;
+
+// Like Top Selections, this looks at every OPEN bet regardless of the current filters, and
+// ignores void selections. A "market" is a competition + market pair, e.g. "UEFA Champions
+// League 2026/27 · Top goalscorer". Stakes are money at risk, so free bets count as £0.
+function getHedgingMarkets() {
+  const markets = {};
+  bets.filter(b => b.status === 'open').forEach(b => {
+    (b.selections || []).forEach(s => {
+      if (s.void || !s.selection) return;
+      const key = `${s.competition || ''}|||${s.market || ''}`;
+      if (!markets[key]) markets[key] = { competition: s.competition || '', market: s.market || '', betIds: new Set(), stake: 0 };
+      const m = markets[key];
+      if (!m.betIds.has(b.id)) { m.betIds.add(b.id); m.stake += stakeCost(b); }
+    });
+  });
+  return Object.values(markets)
+    .map(m => ({ competition: m.competition, market: m.market, betCount: m.betIds.size, stake: m.stake }))
+    .sort((a, b) => b.betCount - a.betCount || b.stake - a.stake);
+}
+
+// One row per selection in the market: how many open bets include it, and the combined stake
+// of those bets (the whole ticket's stake, not a share of it).
+function getHedgingBreakdown(competition, market) {
+  const bySelection = {};
+  bets.filter(b => b.status === 'open').forEach(b => {
+    const counted = new Set();
+    (b.selections || []).forEach(s => {
+      if (s.void || !s.selection || (s.competition || '') !== competition || (s.market || '') !== market) return;
+      if (counted.has(s.selection)) return;
+      counted.add(s.selection);
+      if (!bySelection[s.selection]) bySelection[s.selection] = { selection: s.selection, bets: 0, stake: 0 };
+      bySelection[s.selection].bets++;
+      bySelection[s.selection].stake += stakeCost(b);
+    });
+  });
+  return Object.values(bySelection).sort((a, b) => b.bets - a.bets || b.stake - a.stake);
+}
+
+function renderHedgingMarketList() {
+  document.getElementById('btn-hedging-back').hidden = true;
+  document.getElementById('hedging-title').textContent = 'Hedging';
+  const markets = getHedgingMarkets();
+  const body = document.getElementById('hedging-body');
+  if (markets.length === 0) {
+    body.innerHTML = '<p class="chart-empty">No open bets yet.</p>';
+    return;
+  }
+  body.innerHTML = `
+    <p class="hedge-note">Pick a market to see who else you've backed in it. Open bets only.</p>
+    <input type="text" id="hedging-search" class="hedging-search" placeholder="Filter markets...">
+    <div id="hedging-market-list"></div>
+  `;
+  const list = document.getElementById('hedging-market-list');
+  const fill = () => {
+    const q = document.getElementById('hedging-search').value.trim().toLowerCase();
+    const shown = markets.filter(m => !q || `${m.market} ${m.competition}`.toLowerCase().includes(q));
+    list.innerHTML = shown.length === 0 ? '<p class="chart-empty">No markets match.</p>' : shown.map(m => `
+      <div class="top-selection-row top-selection-row-clickable" data-competition="${escapeHtml(m.competition)}" data-market="${escapeHtml(m.market)}" role="button" tabindex="0">
+        <div class="top-selection-info">
+          <b>${escapeHtml(m.market || '(no market)')}</b>
+          <span class="chip-market">${escapeHtml(m.competition || '(no competition)')}</span>
+        </div>
+        <span class="top-selection-count">${m.betCount} bet${m.betCount === 1 ? '' : 's'} · ${pnlMoney(m.stake)}</span>
+      </div>
+    `).join('');
+    list.querySelectorAll('.top-selection-row-clickable').forEach(row => {
+      const activate = () => renderHedgingMarket(row.dataset.competition, row.dataset.market);
+      row.addEventListener('click', activate);
+      row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
+    });
+  };
+  document.getElementById('hedging-search').addEventListener('input', fill);
+  fill();
+}
+
+function renderHedgingMarket(competition, market, selected) {
+  document.getElementById('btn-hedging-back').hidden = false;
+  document.getElementById('hedging-title').textContent = 'Hedging';
+  const body = document.getElementById('hedging-body');
+  const rows = getHedgingBreakdown(competition, market);
+  if (rows.length === 0) {
+    body.innerHTML = '<p class="chart-empty">No open bets in this market any more.</p>';
+    return;
+  }
+
+  // Shares are of the bet counts across all selections in the market, so they add up to 100%.
+  const total = rows.reduce((sum, r) => sum + r.bets, 0);
+  const shown = rows.slice(0, HEDGE_TOP_N).map((r, i) => ({ ...r, color: HEDGE_COLORS[i] }));
+  if (rows.length > HEDGE_TOP_N) {
+    const rest = rows.slice(HEDGE_TOP_N);
+    shown.push({
+      selection: `Other (${rest.length} selections)`,
+      bets: rest.reduce((sum, r) => sum + r.bets, 0),
+      stake: rest.reduce((sum, r) => sum + r.stake, 0),
+      color: 'var(--gray)',
+      isOther: true,
+    });
+  }
+  const current = shown.find(r => !r.isOther && r.selection === selected) || shown[0];
+  const pct = (n) => (n / total * 100).toFixed(1);
+
+  body.innerHTML = `
+    <div class="hedge-head">
+      <div class="hedge-eyebrow">Hedging context</div>
+      <h3 class="hedge-question">Who else have you backed?</h3>
+      <div class="hedge-market">${escapeHtml(competition || '(no competition)')} · ${escapeHtml(market || '(no market)')}</div>
+      <p class="hedge-note">Figures beside each selection show the total stake on the open bets that include it. Click a selection to see its share.</p>
+      <div class="hedge-share">
+        <b>${pct(current.bets)}%</b>
+        <span>${escapeHtml(current.selection)}'s share of open bets in this market</span>
+      </div>
+    </div>
+    <div class="hedge-bar">
+      ${shown.map(r => `<span class="hedge-bar-seg" style="width:${(r.bets / total * 100).toFixed(2)}%;background:${r.color}" title="${escapeHtml(r.selection)}: ${pct(r.bets)}%"></span>`).join('')}
+    </div>
+    <div class="hedge-rows">
+      ${shown.map(r => `
+        <div class="hedge-row ${r === current ? 'selected' : ''} ${r.isOther ? '' : 'hedge-row-clickable'}" data-selection="${escapeHtml(r.selection)}" ${r.isOther ? '' : 'role="button" tabindex="0"'}>
+          <span class="hedge-dot" style="background:${r.color}"></span>
+          <span class="hedge-name">${escapeHtml(r.selection)}</span>
+          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%</span>
+          <span class="hedge-stake"><b>${pnlMoney(r.stake)}</b><small>staked</small></span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  body.querySelectorAll('.hedge-row-clickable').forEach(row => {
+    const activate = () => renderHedgingMarket(competition, market, row.dataset.selection);
+    row.addEventListener('click', activate);
+    row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
+  });
+}
+
+function openHedgingModal() {
+  renderHedgingMarketList();
+  document.getElementById('hedging-backdrop').hidden = false;
+}
+
 // Renaming moves the entered figures across too (values are keyed by name, not position),
 // so nothing is lost by editing a bookmaker/column title in place instead of deleting and
 // re-adding it.
@@ -2044,6 +2187,12 @@ document.getElementById('btn-top-selections').addEventListener('click', openTopS
 document.getElementById('btn-top-selections-back').addEventListener('click', renderTopSelectionsRanking);
 document.getElementById('btn-close-top-selections').addEventListener('click', () => {
   document.getElementById('top-selections-backdrop').hidden = true;
+});
+
+document.getElementById('btn-hedging').addEventListener('click', openHedgingModal);
+document.getElementById('btn-hedging-back').addEventListener('click', renderHedgingMarketList);
+document.getElementById('btn-close-hedging').addEventListener('click', () => {
+  document.getElementById('hedging-backdrop').hidden = true;
 });
 
 document.getElementById('btn-pnl-tracker').addEventListener('click', openPnlTrackerModal);

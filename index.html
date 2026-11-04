@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PC Ante-Post Bet Tracker</title>
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 
@@ -13,6 +13,7 @@
   <div class="header-actions">
     <button id="btn-add" class="btn btn-primary">+ Add Bet</button>
     <button id="btn-top-selections" class="btn btn-ghost">🔝 Top Selections</button>
+    <button id="btn-hedging" class="btn btn-ghost">⚖️ Hedging</button>
     <button id="btn-pnl-tracker" class="btn btn-ghost">💷 P&amp;L Tracker</button>
     <button id="btn-export" class="btn btn-ghost">Export</button>
     <button id="btn-import" class="btn btn-ghost">Import</button>
@@ -90,6 +91,20 @@
       <button id="btn-close-top-selections" class="btn-close">&times;</button>
     </div>
     <div id="top-selections-list"></div>
+  </div>
+</div>
+
+<!-- Hedging Modal -->
+<div id="hedging-backdrop" class="modal-backdrop" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-header-title">
+        <button type="button" id="btn-hedging-back" class="btn-back" hidden title="Back">‹</button>
+        <h2 id="hedging-title">Hedging</h2>
+      </div>
+      <button id="btn-close-hedging" class="btn-close">&times;</button>
+    </div>
+    <div id="hedging-body"></div>
   </div>
 </div>
 
@@ -227,6 +242,6 @@
   </div>
 </div>
 
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>
