@@ -863,6 +863,8 @@ function openTopSelectionsModal() {
 
 const HEDGE_COLORS = ['#6fb0c9', '#c98d79', '#f0c93a', '#a597cf', '#7bc79a', '#e08a8a', '#8fa0d6'];
 const HEDGE_TOP_N = 7;
+const HEDGE_TOP_COMPETITIONS = 10;
+const hedgingOpenCompetitions = new Set();
 
 // Like Top Selections, this looks at every OPEN bet regardless of the current filters, and
 // ignores void selections. A "market" is a competition + market pair, e.g. "UEFA Champions
@@ -923,31 +925,43 @@ function renderHedgingMarketList() {
     body.innerHTML = '<p class="chart-empty">No open bets yet.</p>';
     return;
   }
+  const hiddenCount = Math.max(0, competitions.length - HEDGE_TOP_COMPETITIONS);
   body.innerHTML = `
-    <p class="hedge-note">Pick a market to see who else you've backed in it. Open bets only.</p>
+    <p class="hedge-note">Pick a market to see who else you've backed in it. Open bets only.${hiddenCount > 0 ? ` Showing your top ${HEDGE_TOP_COMPETITIONS} competitions — use the filter to find the other ${hiddenCount}.` : ''}</p>
     <input type="text" id="hedging-search" class="hedging-search" placeholder="Filter markets...">
     <div id="hedging-market-list"></div>
   `;
   const list = document.getElementById('hedging-market-list');
   const fill = () => {
     const q = document.getElementById('hedging-search').value.trim().toLowerCase();
-    const groups = competitions
+    // With no filter only the busiest competitions are listed (collapsed); filtering searches
+    // every competition and opens the matches so the results are visible straight away.
+    const groups = (q ? competitions : competitions.slice(0, HEDGE_TOP_COMPETITIONS))
       .map(c => ({ ...c, markets: c.markets.filter(m => !q || `${m.market} ${m.competition}`.toLowerCase().includes(q)) }))
       .filter(c => c.markets.length > 0);
     list.innerHTML = groups.length === 0 ? '<p class="chart-empty">No markets match.</p>' : groups.map(c => `
-      <div class="hedge-competition">
-        <div class="hedge-competition-head">
+      <details class="hedge-competition" data-competition="${escapeHtml(c.competition)}" ${q || hedgingOpenCompetitions.has(c.competition) ? 'open' : ''}>
+        <summary class="hedge-competition-head">
           <span>${escapeHtml(c.competition || '(no competition)')}</span>
           <small>${c.betCount} bet${c.betCount === 1 ? '' : 's'} · ${pnlMoney(c.stake)}</small>
-        </div>
+        </summary>
         ${c.markets.map(m => `
           <div class="top-selection-row top-selection-row-clickable" data-competition="${escapeHtml(m.competition)}" data-market="${escapeHtml(m.market)}" role="button" tabindex="0">
             <div class="top-selection-info"><b>${escapeHtml(m.market || '(no market)')}</b></div>
             <span class="top-selection-count">${m.betCount} bet${m.betCount === 1 ? '' : 's'} · ${pnlMoney(m.stake)}</span>
           </div>
         `).join('')}
-      </div>
+      </details>
     `).join('');
+    // Remember which competitions are open so they're still open after coming back from a market.
+    if (!q) {
+      list.querySelectorAll('details.hedge-competition').forEach(d => {
+        d.addEventListener('toggle', () => {
+          if (d.open) hedgingOpenCompetitions.add(d.dataset.competition);
+          else hedgingOpenCompetitions.delete(d.dataset.competition);
+        });
+      });
+    }
     list.querySelectorAll('.top-selection-row-clickable').forEach(row => {
       const activate = () => renderHedgingMarket(row.dataset.competition, row.dataset.market);
       row.addEventListener('click', activate);
