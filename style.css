@@ -303,6 +303,8 @@ body {
   padding: 4px 6px;
 }
 .bet-actions button:hover { color: var(--accent-text); }
+/* The copy symbol is a plain text glyph, which draws smaller than the emoji beside it. */
+.bet-actions button.btn-duplicate { font-size: 19px; line-height: 1; padding-top: 3px; padding-bottom: 3px; }
 .bet-actions button.btn-settle {
   font-size: var(--fs-xs);
   font-weight: 600;

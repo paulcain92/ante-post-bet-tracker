@@ -1430,7 +1430,7 @@ function renderBetsList() {
           </div>
           <div class="bet-actions">
             <button class="btn-edit" title="Edit">✏️</button>
-            <button class="btn-duplicate" title="Duplicate">📋</button>
+            <button class="btn-duplicate" title="Duplicate">⧉</button>
             ${bet.status === 'open' ? '<button class="btn-settle" title="Settle bet (won / cash out / lost)">Settle</button>' : ''}
             <button class="btn-delete" title="Delete">🗑️</button>
           </div>
