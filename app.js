@@ -1013,7 +1013,7 @@ function renderHedgingMarket(competition, market, selected) {
       <div class="hedge-eyebrow">Hedging context</div>
       <h3 class="hedge-question">Who have you backed?</h3>
       <div class="hedge-market">${escapeHtml(competition || '(no competition)')} · ${escapeHtml(market || '(no market)')}</div>
-      <p class="hedge-note">Figures beside each selection show the total stake on the open bets that include it. Click a selection to see its open accumulators.</p>
+      <p class="hedge-note">The percentage beside each selection is its share of your open bets in this market. Click a selection to see its open accumulators.</p>
     </div>
     <div class="hedge-bar">
       ${shown.map(r => `<span class="hedge-bar-seg" style="width:${(r.bets / total * 100).toFixed(2)}%;background:${r.color}" title="${escapeHtml(r.selection)}: ${pct(r.bets)}%"></span>`).join('')}
@@ -1023,8 +1023,8 @@ function renderHedgingMarket(competition, market, selected) {
         <div class="hedge-row ${r === current ? 'selected' : ''} ${r.isOther ? '' : 'hedge-row-clickable'}" data-selection="${escapeHtml(r.selection)}" ${r.isOther ? '' : 'role="button" tabindex="0"'}>
           <span class="hedge-dot" style="background:${r.color}"></span>
           <span class="hedge-name">${escapeHtml(r.selection)}</span>
-          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%${r.avgDecimal ? `<small class="hedge-avg">Average price ${formatAvgPrice(r.avgDecimal)}</small>` : ''}</span>
-          <span class="hedge-stake"><b>${moneyWithCommas(r.stake)}</b><small>staked</small></span>
+          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${moneyWithCommas(r.stake)} staked${r.avgDecimal ? `<small class="hedge-avg">Average price ${formatAvgPrice(r.avgDecimal)}</small>` : ''}</span>
+          <span class="hedge-stake"><b>${pct(r.bets)}%</b><small>of bets</small></span>
         </div>
       `).join('')}
     </div>
