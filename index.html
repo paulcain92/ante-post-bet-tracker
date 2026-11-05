@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PC Ante-Post Bet Tracker</title>
-<link rel="stylesheet" href="style.css?v=40">
+<link rel="stylesheet" href="style.css?v=41">
 </head>
 <body>
 
@@ -15,6 +15,7 @@
     <button id="btn-top-selections" class="btn btn-ghost">🔝 Top Selections</button>
     <button id="btn-hedging" class="btn btn-ghost">⚖️ Hedging</button>
     <button id="btn-export" class="btn btn-ghost">Export</button>
+    <button id="btn-export-csv" class="btn btn-ghost" title="Download all bets as a spreadsheet (CSV)">Export CSV</button>
     <button id="btn-import" class="btn btn-ghost">Import</button>
     <input type="file" id="import-file" accept="application/json" hidden>
   </div>
@@ -29,7 +30,7 @@
 <section class="stats-bar" id="stats-bar"></section>
 
 <section class="filters-bar">
-  <input type="text" id="search-input" placeholder="Search selections (use commas to search for several selections)">
+  <input type="search" id="search-input" autocomplete="off" placeholder="Search selections (use commas to search for several selections)">
   <input type="hidden" id="filter-status" value="">
   <select id="filter-bookmaker">
     <option value="">All bookmakers</option>
@@ -55,16 +56,12 @@
   <button id="btn-clear-filters" class="btn btn-ghost">Clear filters</button>
 </section>
 
+<div id="pagination-top" class="pagination pagination-top" hidden></div>
+
 <main id="bets-list" class="bets-list"></main>
 <p id="empty-state" class="empty-state" hidden>No bets match your filters.</p>
 
-<div id="pagination" class="pagination" hidden>
-  <button type="button" id="btn-first-page" class="btn btn-ghost">« First</button>
-  <button type="button" id="btn-prev-page" class="btn btn-ghost">‹ Prev</button>
-  <span id="pagination-info"></span>
-  <button type="button" id="btn-next-page" class="btn btn-ghost">Next ›</button>
-  <button type="button" id="btn-last-page" class="btn btn-ghost">Last »</button>
-</div>
+<div id="pagination" class="pagination" hidden></div>
 
 <p class="backup-reminder">Your bets are stored locally in this browser only. Export a backup weekly to avoid losing your history. <span id="last-backup-info"></span></p>
 
@@ -221,6 +218,6 @@
   </div>
 </div>
 
-<script src="app.js?v=40"></script>
+<script src="app.js?v=41"></script>
 </body>
 </html>

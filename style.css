@@ -149,6 +149,7 @@ body {
   border-radius: var(--radius);
 }
 .filters-bar input[type=text],
+.filters-bar input[type=search],
 .filters-bar select,
 .filters-bar input[type=date] {
   padding: 7px 10px;
@@ -227,7 +228,7 @@ body {
    fold / odds / stake / potential / if placed / return line up card to card. Empty
    slots (e.g. no "If placed" on a win-only bet) are kept so the columns never shift. */
 @media (min-width: 1500px) {
-  .bet-card-top { display: grid; grid-template-columns: 520px 1fr 120px; column-gap: 14px; }
+  .bet-card-top { display: grid; grid-template-columns: 520px 1fr 170px; column-gap: 14px; }
   .bet-figures {
     display: grid;
     grid-template-columns: 110px 130px 140px 130px 120px;
@@ -346,13 +347,26 @@ body {
 
 .pagination {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 10px 16px;
   margin-top: 18px;
 }
+.pagination-top { margin: 0 0 12px; }
 .pagination button:disabled { opacity: 0.4; cursor: default; }
-#pagination-info { font-size: 13px; color: var(--text-muted); }
+.pagination-info { font-size: 13px; color: var(--text-muted); }
+.pagination-extra { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
+.pagination-extra input,
+.pagination-extra select {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+.pagination-extra input { width: 64px; }
 .backup-banner {
   display: flex;
   flex-wrap: wrap;
@@ -772,3 +786,44 @@ h3 { font-size: 14px; margin: 14px 0 8px; color: var(--text-muted); text-transfo
   body { padding: 0 12px 40px; }
   .bet-figures { gap: 10px; }
 }
+
+/* Red outline for a field with a problem (used by the quick-settle box) */
+.invalid,
+.money-field:has(.invalid) {
+  border-color: var(--red) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--red) 30%, transparent);
+}
+.money-field .invalid { box-shadow: none; }
+
+/* ---------- Quick settle popover ---------- */
+.settle-popover {
+  position: absolute;
+  z-index: 90;
+  width: 260px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  font-size: 13px;
+}
+.settle-title { font-weight: 600; margin-bottom: 8px; }
+.settle-options { display: flex; gap: 6px; }
+.settle-options button {
+  flex: 1;
+  padding: 7px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+}
+.settle-options button:hover { border-color: var(--accent); }
+.settle-options button.active { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.settle-amount { margin-top: 10px; }
+.settle-amount label { display: flex; flex-direction: column; gap: 4px; color: var(--text-muted); }
+.settle-amount .money-field input { width: 100%; }
+.settle-error { margin-top: 8px; color: var(--red); font-size: 12.5px; }
+.settle-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.settle-actions button:disabled { opacity: 0.4; cursor: default; }

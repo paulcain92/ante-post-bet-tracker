@@ -3,7 +3,8 @@ const STORAGE_KEY = 'accaTracker.bets.v1';
 let bets = loadBets();
 let draggedSelectionBlock = null; // the .selection-block currently being dragged to reorder, in the Add/Edit form
 let currentPage = 1;
-const PAGE_SIZE = 20;
+let pageSize = 20;
+const PAGE_SIZE_OPTIONS = [20, 50, 100];
 // Set when the Add/Edit modal is opened from a Top Selections drill-down row, so closing,
 // saving, or deleting that bet drops back into the same drill-down list instead of just closing.
 let topSelectionsReturnContext = null;
@@ -323,6 +324,7 @@ function render() {
   renderBookmakerFilterOptions();
   renderStats();
   renderBetsList();
+  saveFilterPrefs();
 }
 
 // Bookmaker filter isn't a fixed list either — rebuilt from whatever bookmakers actually
@@ -371,7 +373,7 @@ function renderStats() {
     { label: 'Cash out', value: cashedOut, status: 'cash-out' },
     { label: 'Total stakes', value: money(staked), detail: 'totalStaked' },
     { label: 'Open stakes', value: money(openStaked), detail: 'openStaked' },
-    { label: 'Settled return', value: money(returned), detail: 'settledReturn' },
+    { label: 'Total returned', value: money(returned), detail: 'settledReturn' },
     { label: 'Profit / Loss', value: money(pl), cls: pl > 0 ? 'pos' : (pl < 0 ? 'neg' : ''), detail: 'pl' },
   ];
 
@@ -420,7 +422,7 @@ const STAT_DETAIL_METRICS = {
     getValue: (betsInGroup) => betsInGroup.filter(b => b.status === 'open').reduce((sum, b) => sum + stakeCost(b), 0),
   },
   settledReturn: {
-    label: 'Settled return',
+    label: 'Total returned',
     color: 'var(--accent)',
     getValue: (betsInGroup) => betsInGroup
       .filter(b => b.status !== 'open')
@@ -1130,34 +1132,198 @@ function moneyWithCommas(n) {
   return '£' + (rounded < 0 ? '-' : '') + withCommas + (decPart ? '.' + decPart : '');
 }
 
+// ---------- Quick settle ----------
+
+// A small popover on open bets for settling without opening the full edit form: choose Won,
+// Cash out or Lost, confirm the return where one applies, and the bet moves to that status.
+let settlePopover = null;
+
+function closeSettlePopover() {
+  if (settlePopover) { settlePopover.remove(); settlePopover = null; }
+}
+
+function settleBet(bet, outcome, amount) {
+  if (outcome === 'won') {
+    bet.status = 'won';
+    bet.actualReturn = amount;
+    // Same as ticking every selection won: colour them all, except voided ones.
+    bet.selections.forEach(s => { if (!s.void) s.result = 'won'; });
+  } else if (outcome === 'cash-out') {
+    bet.status = 'cash-out';
+    bet.actualReturn = amount;
+  } else {
+    bet.status = 'lost';
+    if (bet.actualReturn === null || bet.actualReturn === undefined) bet.actualReturn = 0;
+  }
+  saveBets();
+  render();
+}
+
+function openSettlePopover(bet, anchor) {
+  const wasThisBet = settlePopover && settlePopover.dataset.betId === bet.id;
+  closeSettlePopover();
+  if (wasThisBet) return; // clicking the same button again just closes it
+
+  const pop = document.createElement('div');
+  pop.className = 'settle-popover';
+  pop.dataset.betId = bet.id;
+  const potential = bet.potentialReturn !== null && bet.potentialReturn !== undefined ? Number(bet.potentialReturn) : null;
+  pop.innerHTML = `
+    <div class="settle-title">Settle this bet</div>
+    <div class="settle-options">
+      <button type="button" data-outcome="won">Won</button>
+      <button type="button" data-outcome="cash-out">Cash out</button>
+      <button type="button" data-outcome="lost">Lost</button>
+    </div>
+    <div class="settle-amount" hidden>
+      <label><span class="settle-amount-label">Return</span>
+        <span class="money-field"><span class="money-prefix">£</span><input type="number" step="0.01" min="0" class="settle-amount-input"></span>
+      </label>
+    </div>
+    <div class="settle-error" role="alert" hidden></div>
+    <div class="settle-actions">
+      <button type="button" class="btn btn-ghost settle-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary settle-confirm" disabled>Confirm</button>
+    </div>
+  `;
+  document.body.appendChild(pop);
+  settlePopover = pop;
+
+  // Sit just under the button, kept inside the screen.
+  const rect = anchor.getBoundingClientRect();
+  const width = pop.offsetWidth;
+  pop.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  pop.style.left = `${Math.max(8, Math.min(window.scrollX + rect.right - width, window.scrollX + document.documentElement.clientWidth - width - 8))}px`;
+
+  let outcome = null;
+  const amountWrap = pop.querySelector('.settle-amount');
+  const amountInput = pop.querySelector('.settle-amount-input');
+  const errorEl = pop.querySelector('.settle-error');
+  const confirmBtn = pop.querySelector('.settle-confirm');
+
+  pop.querySelectorAll('.settle-options button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      outcome = btn.dataset.outcome;
+      pop.querySelectorAll('.settle-options button').forEach(b => b.classList.toggle('active', b === btn));
+      errorEl.hidden = true;
+      confirmBtn.disabled = false;
+      if (outcome === 'lost') {
+        amountWrap.hidden = true;
+        return;
+      }
+      amountWrap.hidden = false;
+      pop.querySelector('.settle-amount-label').textContent = outcome === 'won' ? 'Return' : 'Cash-out amount';
+      // A win is pre-filled with the potential return (change it for a part-win such as an
+      // each-way place only); a cash-out has no way to be guessed, so starts empty.
+      amountInput.value = outcome === 'won' && potential !== null ? potential : '';
+      amountInput.focus();
+    });
+  });
+
+  const submit = () => {
+    if (!outcome) return;
+    let amount = null;
+    if (outcome !== 'lost') {
+      amount = amountInput.value === '' ? NaN : Number(amountInput.value);
+      if (isNaN(amount) || amount < 0) {
+        errorEl.textContent = outcome === 'won' ? 'Enter the return for this bet.' : 'Enter the amount you cashed out for.';
+        errorEl.hidden = false;
+        amountInput.classList.add('invalid');
+        amountInput.focus();
+        return;
+      }
+    }
+    closeSettlePopover();
+    settleBet(bet, outcome, amount);
+  };
+  confirmBtn.addEventListener("click", submit);
+  amountInput.addEventListener('input', () => { amountInput.classList.remove('invalid'); errorEl.hidden = true; });
+  amountInput.addEventListener('keydown', (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+  pop.querySelector('.settle-cancel').addEventListener('click', closeSettlePopover);
+}
+
+// Clicking anywhere else closes the settle popover.
+document.addEventListener('mousedown', (e) => {
+  if (settlePopover && !e.target.closest('.settle-popover') && !e.target.closest('.btn-settle')) closeSettlePopover();
+});
+
+// The page controls appear both above and below the list. They're shown whenever there are more
+// bets than the smallest page size, so the "per page" choice can always be changed back.
+function renderPagination(totalBets, totalPages) {
+  const show = totalBets > PAGE_SIZE_OPTIONS[0];
+  const html = `
+    <button type="button" class="btn btn-ghost" data-page-action="first" ${currentPage === 1 ? 'disabled' : ''}>« First</button>
+    <button type="button" class="btn btn-ghost" data-page-action="prev" ${currentPage === 1 ? 'disabled' : ''}>‹ Prev</button>
+    <span class="pagination-info">Page ${currentPage} of ${totalPages}</span>
+    <button type="button" class="btn btn-ghost" data-page-action="next" ${currentPage === totalPages ? 'disabled' : ''}>Next ›</button>
+    <button type="button" class="btn btn-ghost" data-page-action="last" ${currentPage === totalPages ? 'disabled' : ''}>Last »</button>
+    <label class="pagination-extra">Go to page
+      <input type="number" class="page-jump" min="1" max="${totalPages}" value="${currentPage}" aria-label="Go to page number">
+    </label>
+    <label class="pagination-extra">Per page
+      <select class="page-size-select" aria-label="Bets per page">
+        ${PAGE_SIZE_OPTIONS.map(n => `<option value="${n}" ${n === pageSize ? 'selected' : ''}>${n}</option>`).join('')}
+      </select>
+    </label>
+  `;
+  ['pagination-top', 'pagination'].forEach(id => {
+    const el = document.getElementById(id);
+    el.hidden = !show;
+    if (show) el.innerHTML = html;
+  });
+}
+
+// After changing page, jump back to the top of the list so the next page is read from its
+// first bet rather than wherever the Next button happened to be on screen.
+function scrollToListTop() {
+  document.getElementById('pagination-top').scrollIntoView({ block: 'start' });
+}
+
+function goToPage(page) {
+  currentPage = page;
+  render();
+  scrollToListTop();
+}
+
+['pagination-top', 'pagination'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-page-action]');
+    if (!btn || btn.disabled) return;
+    const action = btn.dataset.pageAction;
+    goToPage(action === 'first' ? 1 : action === 'prev' ? currentPage - 1 : action === 'next' ? currentPage + 1 : Infinity);
+  });
+  el.addEventListener('change', (e) => {
+    if (e.target.matches('.page-jump')) {
+      const n = Math.floor(Number(e.target.value));
+      goToPage(isFinite(n) && n >= 1 ? n : currentPage);
+    } else if (e.target.matches('.page-size-select')) {
+      pageSize = Number(e.target.value) || 20;
+      goToPage(1);
+    }
+  });
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.matches('.page-jump')) { e.preventDefault(); e.target.blur(); }
+  });
+});
+
 function renderBetsList() {
   const fullList = getFilteredSortedBets();
   const container = document.getElementById('bets-list');
   const emptyState = document.getElementById('empty-state');
-  const pagination = document.getElementById('pagination');
 
   if (fullList.length === 0) {
     container.innerHTML = '';
     emptyState.hidden = false;
-    pagination.hidden = true;
+    renderPagination(0, 1);
     return;
   }
   emptyState.hidden = true;
 
-  const totalPages = Math.max(1, Math.ceil(fullList.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(fullList.length / pageSize));
   currentPage = Math.min(Math.max(1, currentPage), totalPages);
-  const list = fullList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-
-  if (totalPages > 1) {
-    pagination.hidden = false;
-    document.getElementById('pagination-info').textContent = `Page ${currentPage} of ${totalPages}`;
-    document.getElementById('btn-first-page').disabled = currentPage === 1;
-    document.getElementById('btn-prev-page').disabled = currentPage === 1;
-    document.getElementById('btn-next-page').disabled = currentPage === totalPages;
-    document.getElementById('btn-last-page').disabled = currentPage === totalPages;
-  } else {
-    pagination.hidden = true;
-  }
+  const list = fullList.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  renderPagination(fullList.length, totalPages);
 
   const searchQuery = getSearchTerms();
 
@@ -1196,6 +1362,7 @@ function renderBetsList() {
           <div class="bet-actions">
             <button class="btn-edit" title="Edit">✏️</button>
             <button class="btn-duplicate" title="Duplicate">📋</button>
+            ${bet.status === 'open' ? '<button class="btn-settle" title="Settle bet (won / cash out / lost)">💷</button>' : ''}
             ${bet.status === 'open' ? '<button class="btn-mark-lost" title="Mark as lost">×</button>' : ''}
             <button class="btn-delete" title="Delete">🗑️</button>
           </div>
@@ -1257,6 +1424,15 @@ function renderBetsList() {
     btn.addEventListener('click', (e) => {
       const id = e.target.closest('.bet-card').dataset.id;
       openModal(bets.find(b => b.id === id), { duplicate: true });
+    });
+  });
+
+  container.querySelectorAll('.btn-settle').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = e.target.closest('.bet-card').dataset.id;
+      const targetBet = bets.find(b => b.id === id);
+      if (targetBet) openSettlePopover(targetBet, btn);
     });
   });
 
@@ -1696,6 +1872,7 @@ function attachFixedDropdown(input, options) {
       e.preventDefault();
       accept(activeIndex);
     } else if (e.key === 'Escape') {
+      e.preventDefault(); // closes just this list, not the whole window behind it
       close();
     }
   });
@@ -1801,6 +1978,7 @@ function attachSelectDropdown(select) {
       e.preventDefault();
       accept(activeIndex);
     } else if (e.key === 'Escape') {
+      e.preventDefault(); // closes just this list, not the whole window behind it
       close();
     }
   });
@@ -1913,6 +2091,7 @@ function attachAutocomplete(input, getSuggestions, onAccept, { showAllWhenEmpty 
         accept(activeIndex);
       }
     } else if (e.key === 'Escape') {
+      e.preventDefault(); // closes just this list, not the whole window behind it
       close();
     }
   });
@@ -2197,23 +2376,6 @@ document.getElementById('btn-clear-filters').addEventListener('click', () => {
   render();
 });
 
-document.getElementById('btn-first-page').addEventListener('click', () => {
-  currentPage = 1;
-  render();
-});
-document.getElementById('btn-prev-page').addEventListener('click', () => {
-  currentPage--;
-  render();
-});
-document.getElementById('btn-next-page').addEventListener('click', () => {
-  currentPage++;
-  render();
-});
-document.getElementById('btn-last-page').addEventListener('click', () => {
-  currentPage = Infinity;
-  render();
-});
-
 // ---------- Export / Import ----------
 
 const LAST_EXPORT_KEY = 'accaTracker.lastExport.v1';
@@ -2263,6 +2425,52 @@ function exportBackup() {
   renderBackupReminder();
 }
 
+// A spreadsheet-friendly export — one row per bet, every bet (not just the filtered ones).
+// Unlike the backup file it can't be imported back; it's for analysing in Excel or Sheets.
+function csvCell(value) {
+  let text = value === null || value === undefined ? '' : String(value);
+  // A cell starting with = + - @ would be run as a formula by a spreadsheet, so mark it as text.
+  if (/^[=+\-@]/.test(text) && isNaN(Number(text))) text = "'" + text;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function plainOdds(bet) {
+  if (bet.totalOddsRaw) return bet.totalOddsRaw;
+  const frac = decimalToFraction(bet.totalOdds);
+  return frac ?? (bet.totalOdds ?? '');
+}
+
+function exportCsv() {
+  const header = ['Date placed', 'Bookmaker', 'Status', 'Bet type', 'Free bet', 'Acca boost %', 'Win stake', 'Each-way stake',
+    'Stake (own money)', 'Total odds', 'Potential return', 'Return', 'Profit / loss', 'Selections', 'Selection details'];
+  const rows = [...bets]
+    .sort((a, b) => String(a.datePlaced).localeCompare(String(b.datePlaced)))
+    .map(b => {
+      const settled = b.status !== 'open';
+      const ret = b.actualReturn !== null && b.actualReturn !== undefined && b.actualReturn !== '' ? Number(b.actualReturn) : 0;
+      const details = (b.selections || []).map(s => {
+        const result = s.void ? 'void' : (s.result && s.result !== 'pending' ? s.result : 'open');
+        return `${s.selection} — ${s.market}${s.competition ? ' · ' + s.competition : ''}${s.price ? ' @ ' + s.price : ''} [${result}]`;
+      }).join(' | ');
+      return [
+        b.datePlaced, b.bookmaker, b.status, b.betType === 'each-way' ? 'Each way' : 'Win only', b.freeBet ? 'Yes' : 'No',
+        b.boostPercent || '', b.winStake ?? '', b.betType === 'each-way' ? (b.eachWayStake ?? '') : '',
+        stakeCost(b).toFixed(2), plainOdds(b), b.potentialReturn ?? '', settled ? ret.toFixed(2) : '',
+        settled ? (ret - stakeCost(b)).toFixed(2) : '', (b.selections || []).length, details,
+      ];
+    });
+  const csv = [header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+  // The leading byte-order mark makes Excel read £ and other symbols correctly.
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `acca-tracker-bets-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('btn-export-csv').addEventListener('click', exportCsv);
 document.getElementById('btn-export').addEventListener('click', exportBackup);
 document.getElementById('btn-banner-export').addEventListener('click', exportBackup);
 document.getElementById('btn-banner-snooze').addEventListener('click', () => {
@@ -2307,7 +2515,64 @@ document.getElementById('import-file').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
+// ---------- Closing windows with Escape or a click outside ----------
+
+// Checked in this order, so Escape always closes whichever window is on top.
+const CLOSABLE_WINDOWS = [
+  { backdrop: 'modal-backdrop', close: () => closeModalWithConfirm() },
+  { backdrop: 'hedging-backdrop', close: () => { document.getElementById('hedging-backdrop').hidden = true; } },
+  { backdrop: 'top-selections-backdrop', close: () => { document.getElementById('top-selections-backdrop').hidden = true; } },
+  { backdrop: 'stat-detail-backdrop', close: () => { document.getElementById('stat-detail-backdrop').hidden = true; } },
+];
+
+document.addEventListener('keydown', (e) => {
+  // Skip when something else already handled Escape (e.g. an open dropdown list closing itself).
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  if (settlePopover) { closeSettlePopover(); return; }
+  const open = CLOSABLE_WINDOWS.find(w => !document.getElementById(w.backdrop).hidden);
+  if (open) open.close();
+});
+
+// Only a click that both starts and ends on the dark backdrop counts, so dragging to select
+// text inside a window and releasing outside it doesn't close it by accident.
+CLOSABLE_WINDOWS.forEach(w => {
+  const backdrop = document.getElementById(w.backdrop);
+  let pressedOnBackdrop = false;
+  backdrop.addEventListener('mousedown', (e) => { pressedOnBackdrop = e.target === backdrop; });
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop && pressedOnBackdrop) w.close();
+    pressedOnBackdrop = false;
+  });
+});
+
+// ---------- Remembering filters between visits ----------
+
+const FILTER_PREFS_KEY = 'accaTracker.filters.v1';
+const FILTER_FIELDS = ['search-input', 'filter-status', 'filter-bookmaker', 'filter-bet-type', 'filter-date-from', 'filter-date-to', 'sort-by'];
+
+function saveFilterPrefs() {
+  try {
+    const prefs = { pageSize, freeBet: document.getElementById('filter-free-bet').checked };
+    FILTER_FIELDS.forEach(id => { prefs[id] = document.getElementById(id).value; });
+    localStorage.setItem(FILTER_PREFS_KEY, JSON.stringify(prefs));
+  } catch (e) { /* remembering filters is a convenience — never worth an error */ }
+}
+
+function restoreFilterPrefs() {
+  try {
+    const prefs = JSON.parse(localStorage.getItem(FILTER_PREFS_KEY) || 'null');
+    if (!prefs || typeof prefs !== 'object') return;
+    if (PAGE_SIZE_OPTIONS.includes(prefs.pageSize)) pageSize = prefs.pageSize;
+    renderBookmakerFilterOptions(); // the bookmaker list has to exist before it can be selected
+    FILTER_FIELDS.forEach(id => {
+      if (typeof prefs[id] === 'string') document.getElementById(id).value = prefs[id];
+    });
+    document.getElementById('filter-free-bet').checked = prefs.freeBet === true;
+  } catch (e) { /* ignore unreadable preferences */ }
+}
+
 // ---------- Init ----------
 
+restoreFilterPrefs();
 render();
 renderBackupReminder();
