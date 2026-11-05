@@ -1172,7 +1172,7 @@ function openSettlePopover(bet, anchor) {
     <div class="settle-title">Settle this bet</div>
     <div class="settle-options">
       <button type="button" data-outcome="won">Won</button>
-      <button type="button" data-outcome="cash-out">Cash out</button>
+      <button type="button" data-outcome="cash-out">Cash Out</button>
       <button type="button" data-outcome="lost">Lost</button>
     </div>
     <div class="settle-amount" hidden>
@@ -1214,7 +1214,7 @@ function openSettlePopover(bet, anchor) {
       errorEl.hidden = true;
       confirmBtn.disabled = false;
       amountWrap.hidden = false;
-      pop.querySelector('.settle-amount-label').textContent = outcome === 'won' ? 'Return' : 'Cash-out amount';
+      pop.querySelector('.settle-amount-label').textContent = outcome === 'won' ? 'Return' : 'Cash Out amount';
       // A win is pre-filled with the potential return (change it for a part-win such as an
       // each-way place only); a cash-out has no way to be guessed, so starts empty.
       amountInput.value = outcome === 'won' && potential !== null ? potential : '';

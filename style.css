@@ -816,7 +816,7 @@ h3 { font-size: 14px; margin: 14px 0 8px; color: var(--text-muted); text-transfo
   box-shadow: 0 8px 30px rgba(0,0,0,0.3);
   font-size: 13px;
 }
-.settle-title { font-weight: 600; margin-bottom: 8px; }
+.settle-title { font-weight: 600; margin-bottom: 8px; text-align: center; }
 .settle-options { display: flex; gap: 6px; }
 .settle-options button {
   flex: 1;
