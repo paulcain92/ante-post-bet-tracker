@@ -197,6 +197,18 @@ body {
 }
 .bet-figures .if-placed b { color: inherit; }
 
+/* Half-screen / laptop widths: keep date, figures and the action buttons on a single line by
+   tightening the gaps rather than letting the buttons drop underneath. */
+@media (min-width: 700px) and (max-width: 1499px) {
+  .bet-card-top { flex-wrap: nowrap; gap: 10px; }
+  .bet-meta { gap: 6px 10px; flex: 0 1 auto; min-width: 0; }
+  .bet-meta > * { white-space: nowrap; }
+  .bet-figures { flex-wrap: nowrap; gap: 8px; font-size: 12px; }
+  .bet-figures .if-placed { padding: 2px 8px; }
+  .bet-actions { gap: 0; flex-shrink: 0; }
+  .bet-actions button { padding: 4px 4px; }
+}
+
 /* On wide screens every card lays its figures out on the same fixed columns, so
    fold / odds / stake / potential / if placed / return line up card to card. Empty
    slots (e.g. no "If placed" on a win-only bet) are kept so the columns never shift. */
