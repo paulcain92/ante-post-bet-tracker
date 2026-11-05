@@ -981,7 +981,7 @@ function renderHedgingMarketList() {
     return;
   }
   body.innerHTML = `
-    <p class="hedge-note">Pick a market to see who else you've backed in it. Only markets with ${HEDGE_MIN_BETS}+ open bets across more than one selection are shown.</p>
+    <p class="hedge-note">Pick a market to see the list of selections. Only markets with ${HEDGE_MIN_BETS}+ open bets across more than one selection are shown.</p>
     <input type="text" id="hedging-search" class="hedging-search" placeholder="Filter markets...">
     <div id="hedging-market-list"></div>
   `;
@@ -1055,10 +1055,9 @@ function renderHedgingMarket(competition, market, selected) {
 
   body.innerHTML = `
     <div class="hedge-head">
-      <div class="hedge-eyebrow">Hedging context</div>
-      <h3 class="hedge-question">Who have you backed?</h3>
-      <div class="hedge-market">${escapeHtml(competition || '(no competition)')} · ${escapeHtml(market || '(no market)')}</div>
-      <p class="hedge-note">Figures beside each selection show the total stake on the open bets that include it. Click a selection to see its open accumulators.</p>
+      <div class="hedge-eyebrow">${escapeHtml(competition || '(no competition)')} · ${escapeHtml(market || '(no market)')}</div>
+      <h3 class="hedge-question">Selections</h3>
+      <p class="hedge-note">Statistics are found beside each selection. Click a selection to see open accumulators.</p>
     </div>
     <div class="hedge-bar">
       ${shown.map(r => `<span class="hedge-bar-seg" style="width:${(r.bets / total * 100).toFixed(2)}%;background:${r.color}" title="${escapeHtml(r.selection)}: ${pct(r.bets)}%"></span>`).join('')}
