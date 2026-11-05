@@ -1273,10 +1273,10 @@ function renderPagination(totalBets, totalPages) {
   if (show) el.innerHTML = html;
 }
 
-// After changing page, jump back to the top of the list so the next page is read from its
-// first bet rather than wherever the Next button happened to be on screen.
+// After changing page, jump right back to the top of the page (header, stats and filters
+// included) rather than wherever the page button happened to be on screen.
 function scrollToListTop() {
-  document.getElementById('bets-list').scrollIntoView({ block: 'start' });
+  window.scrollTo(0, 0);
 }
 
 function goToPage(page) {

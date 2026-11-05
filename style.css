@@ -362,7 +362,6 @@ body {
   gap: 10px 16px;
   margin-top: 18px;
 }
-#bets-list { scroll-margin-top: 12px; }
 .pagination button:disabled { opacity: 0.4; cursor: default; }
 .pagination-info { font-size: 13px; color: var(--text-muted); }
 .pagination-extra { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
