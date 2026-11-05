@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PC Ante-Post Bet Tracker</title>
-<link rel="stylesheet" href="style.css?v=45">
+<link rel="stylesheet" href="style.css?v=46">
 </head>
 <body>
 
@@ -98,6 +98,24 @@
     </div>
     <div id="hedging-body"></div>
   </div>
+</div>
+
+<!-- Import Modal -->
+<div id="import-backdrop" class="modal-backdrop" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="import-title">Import backup</h2>
+      <button id="btn-close-import" class="btn-close">&times;</button>
+    </div>
+    <div id="import-body"></div>
+  </div>
+</div>
+
+<!-- Undo message -->
+<div id="undo-toast" class="undo-toast" role="status" aria-live="polite" hidden>
+  <span id="undo-toast-text"></span>
+  <button type="button" id="undo-toast-btn" class="btn btn-ghost">Undo</button>
+  <button type="button" id="undo-toast-close" class="btn-close" aria-label="Dismiss">&times;</button>
 </div>
 
 <!-- Add / Edit Bet Modal -->
@@ -214,6 +232,6 @@
   </div>
 </div>
 
-<script src="app.js?v=45"></script>
+<script src="app.js?v=46"></script>
 </body>
 </html>

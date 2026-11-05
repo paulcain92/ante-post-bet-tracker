@@ -1132,6 +1132,35 @@ function moneyWithCommas(n) {
   return '£' + (rounded < 0 ? '-' : '') + withCommas + (decPart ? '.' + decPart : '');
 }
 
+// ---------- Undo ----------
+
+// After a change that's easy to regret (settling, deleting, importing) a message appears for a
+// few seconds with an Undo button. The undo works from a copy of every bet taken just before
+// the change, so it restores things exactly as they were.
+let undoTimer = null;
+
+function hideUndoToast() {
+  clearTimeout(undoTimer);
+  document.getElementById('undo-toast').hidden = true;
+}
+
+function showUndoToast(message, snapshot) {
+  const toast = document.getElementById('undo-toast');
+  document.getElementById('undo-toast-text').textContent = message;
+  const undoBtn = document.getElementById('undo-toast-btn');
+  undoBtn.onclick = () => {
+    bets = JSON.parse(snapshot);
+    saveBets();
+    hideUndoToast();
+    render();
+  };
+  toast.hidden = false;
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndoToast, 10000);
+}
+
+document.getElementById('undo-toast-close').addEventListener('click', hideUndoToast);
+
 // ---------- Quick settle ----------
 
 // A small popover on open bets for settling without opening the full edit form: choose Won,
@@ -1143,6 +1172,7 @@ function closeSettlePopover() {
 }
 
 function settleBet(bet, outcome, amount) {
+  const snapshot = JSON.stringify(bets);
   if (outcome === 'won') {
     bet.status = 'won';
     bet.actualReturn = amount;
@@ -1157,6 +1187,7 @@ function settleBet(bet, outcome, amount) {
   }
   saveBets();
   render();
+  showUndoToast(`Bet settled as ${outcome === 'cash-out' ? 'Cash Out' : outcome}.`, snapshot);
 }
 
 function openSettlePopover(bet, anchor) {
@@ -1438,10 +1469,12 @@ function renderBetsList() {
   container.querySelectorAll('.btn-delete').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const id = e.target.closest('.bet-card').dataset.id;
-      if (confirm('Delete this bet? This cannot be undone.')) {
+      if (confirm('Delete this bet?')) {
+        const snapshot = JSON.stringify(bets);
         bets = bets.filter(b => b.id !== id);
         saveBets();
         render();
+        showUndoToast('Bet deleted.', snapshot);
       }
     });
   });
@@ -2333,11 +2366,13 @@ document.getElementById('btn-add-selection').addEventListener('click', () => { m
 
 document.getElementById('btn-delete-bet').addEventListener('click', () => {
   const id = document.getElementById('bet-id').value;
-  if (id && confirm('Delete this bet? This cannot be undone.')) {
+  if (id && confirm('Delete this bet?')) {
+    const snapshot = JSON.stringify(bets);
     bets = bets.filter(b => b.id !== id);
     saveBets();
     closeModal();
     render();
+    showUndoToast('Bet deleted.', snapshot);
   }
 });
 
@@ -2421,6 +2456,83 @@ document.getElementById('btn-import').addEventListener('click', () => {
   document.getElementById('import-file').click();
 });
 
+// A bet from a file is only used if it has the basics every screen relies on — anything else
+// would crash the list — so unreadable entries are counted and skipped rather than imported.
+function isUsableBet(b) {
+  return b && typeof b === 'object' && Array.isArray(b.selections)
+    && typeof b.datePlaced === 'string' && typeof b.bookmaker === 'string' && typeof b.status === 'string';
+}
+
+// Importing is a two-step choice in a proper window (not a pop-up where "Cancel" secretly means
+// "replace everything"): see what's in the file, then Add the new bets, Replace everything
+// (with its own confirmation), or Cancel. Every outcome can be undone straight afterwards.
+function openImportDialog(fileBets, unreadableCount) {
+  const backdrop = document.getElementById('import-backdrop');
+  const body = document.getElementById('import-body');
+  const existingIds = new Set(bets.map(b => b.id));
+  const usable = fileBets.filter(isUsableBet);
+  const unreadable = unreadableCount + (fileBets.length - usable.length);
+  const newBets = usable.filter(b => !b.id || !existingIds.has(b.id));
+  const alreadyHere = usable.length - newBets.length;
+  const withIds = list => list.map(b => (b.id ? b : { ...b, id: makeId() }));
+  const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+
+  const showChoices = () => {
+    document.getElementById('import-title').textContent = 'Import backup';
+    body.innerHTML = `
+      <p class="import-lead">This file has <b>${plural(fileBets.length + unreadableCount, 'bet')}</b>. You currently have <b>${plural(bets.length, 'bet')}</b>.</p>
+      <ul class="import-summary">
+        <li><b>${newBets.length.toLocaleString()}</b> ${newBets.length === 1 ? 'is' : 'are'} new</li>
+        <li><b>${alreadyHere.toLocaleString()}</b> ${alreadyHere === 1 ? 'is' : 'are'} already in your tracker and will be skipped</li>
+        ${unreadable ? `<li><b>${unreadable.toLocaleString()}</b> couldn't be read and will be skipped</li>` : ''}
+      </ul>
+      <div class="import-actions">
+        <button type="button" class="btn btn-primary" data-import="merge" ${newBets.length === 0 ? 'disabled' : ''}>${newBets.length === 0 ? 'Nothing new to add' : `Add the ${plural(newBets.length, 'new bet')}`}</button>
+        <button type="button" class="btn btn-ghost" data-import="replace" ${usable.length === 0 ? 'disabled' : ''}>Replace all my bets…</button>
+        <button type="button" class="btn btn-ghost" data-import="cancel">Cancel</button>
+      </div>`;
+  };
+
+  const showReplaceConfirm = () => {
+    document.getElementById('import-title').textContent = 'Replace all bets?';
+    body.innerHTML = `
+      <p class="import-lead">This will remove your current <b>${plural(bets.length, 'bet')}</b> and replace them with the <b>${plural(usable.length, 'bet')}</b> in this file.</p>
+      <p class="import-note">Anything that isn't in the file will be gone. You'll get a few seconds to undo, but if you're not sure, go back and export a backup first.</p>
+      <div class="import-actions">
+        <button type="button" class="btn btn-danger" data-import="replace-confirm">Replace all bets</button>
+        <button type="button" class="btn btn-ghost" data-import="back">Go back</button>
+      </div>`;
+  };
+
+  body.onclick = (e) => {
+    const action = e.target.closest('[data-import]')?.dataset.import;
+    if (!action) return;
+    if (action === 'cancel') { backdrop.hidden = true; return; }
+    if (action === 'replace') { showReplaceConfirm(); return; }
+    if (action === 'back') { showChoices(); return; }
+    const snapshot = JSON.stringify(bets);
+    if (action === 'merge') {
+      bets.push(...withIds(newBets));
+      showUndoToast(`Added ${plural(newBets.length, 'bet')}.`, snapshot);
+    } else if (action === 'replace-confirm') {
+      const before = bets.length;
+      bets = withIds(usable);
+      showUndoToast(`Replaced ${plural(before, 'bet')} with ${plural(usable.length, 'bet')}.`, snapshot);
+    }
+    backdrop.hidden = true;
+    saveBets();
+    currentPage = 1;
+    render();
+  };
+
+  showChoices();
+  backdrop.hidden = false;
+}
+
+document.getElementById('btn-close-import').addEventListener('click', () => {
+  document.getElementById('import-backdrop').hidden = true;
+});
+
 document.getElementById('import-file').addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -2432,20 +2544,7 @@ document.getElementById('import-file').addEventListener('change', (e) => {
       // backups made while the P&L Tracker existed also carry its data, which is ignored).
       const imported = Array.isArray(parsed) ? parsed : parsed?.bets;
       if (!Array.isArray(imported)) throw new Error('Invalid file format');
-      const mode = confirm(
-        `Import ${imported.length} bet(s).\n\nOK = merge with existing bets\nCancel = replace all existing bets`
-      );
-      if (mode) {
-        const existingIds = new Set(bets.map(b => b.id));
-        imported.forEach(b => {
-          if (existingIds.has(b.id)) b.id = makeId();
-          bets.push(b);
-        });
-      } else {
-        bets = imported;
-      }
-      saveBets();
-      render();
+      openImportDialog(imported, 0);
     } catch (err) {
       alert('Could not import file: ' + err.message);
     }
@@ -2458,6 +2557,7 @@ document.getElementById('import-file').addEventListener('change', (e) => {
 
 // Checked in this order, so Escape always closes whichever window is on top.
 const CLOSABLE_WINDOWS = [
+  { backdrop: 'import-backdrop', close: () => { document.getElementById('import-backdrop').hidden = true; } },
   { backdrop: 'modal-backdrop', close: () => closeModalWithConfirm() },
   { backdrop: 'hedging-backdrop', close: () => { document.getElementById('hedging-backdrop').hidden = true; } },
   { backdrop: 'top-selections-backdrop', close: () => { document.getElementById('top-selections-backdrop').hidden = true; } },
