@@ -1137,11 +1137,21 @@ function moneyWithCommas(n) {
 // After a change that's easy to regret (settling, deleting, importing) a message appears for a
 // few seconds with an Undo button. The undo works from a copy of every bet taken just before
 // the change, so it restores things exactly as they were.
+const UNDO_DURATION_MS = 10000;
 let undoTimer = null;
+let undoRemaining = UNDO_DURATION_MS;
+let undoStartedAt = 0;
 
 function hideUndoToast() {
   clearTimeout(undoTimer);
   document.getElementById('undo-toast').hidden = true;
+}
+
+function startUndoTimer(ms) {
+  clearTimeout(undoTimer);
+  undoRemaining = ms;
+  undoStartedAt = Date.now();
+  undoTimer = setTimeout(hideUndoToast, ms);
 }
 
 function showUndoToast(message, snapshot) {
@@ -1155,8 +1165,36 @@ function showUndoToast(message, snapshot) {
     render();
   };
   toast.hidden = false;
-  clearTimeout(undoTimer);
-  undoTimer = setTimeout(hideUndoToast, 10000);
+  // Replay the slide-up and the countdown line from the start for every new message.
+  toast.classList.remove('undo-toast-in');
+  const bar = toast.querySelector('.undo-toast-bar');
+  bar.style.animation = 'none';
+  void toast.offsetWidth;
+  bar.style.animation = '';
+  toast.classList.add('undo-toast-in');
+  startUndoTimer(UNDO_DURATION_MS);
+}
+
+// While the pointer is over the message (or a button in it has keyboard focus) the countdown
+// holds, then carries on from where it stopped.
+{
+  const toast = document.getElementById('undo-toast');
+  const pause = () => {
+    if (toast.hidden || !undoTimer) return;
+    clearTimeout(undoTimer);
+    undoTimer = null;
+    undoRemaining = Math.max(0, undoRemaining - (Date.now() - undoStartedAt));
+    toast.classList.add('undo-toast-paused');
+  };
+  const resume = () => {
+    if (toast.hidden || undoTimer) return;
+    toast.classList.remove('undo-toast-paused');
+    startUndoTimer(undoRemaining);
+  };
+  toast.addEventListener('mouseenter', pause);
+  toast.addEventListener('mouseleave', resume);
+  toast.addEventListener('focusin', pause);
+  toast.addEventListener('focusout', resume);
 }
 
 document.getElementById('undo-toast-close').addEventListener('click', hideUndoToast);

@@ -862,13 +862,37 @@ h3 { font-size: var(--fs-base); margin: 14px 0 8px; color: var(--text-muted); te
   align-items: center;
   gap: 12px;
   max-width: calc(100vw - 24px);
-  padding: 10px 12px 10px 16px;
+  padding: 10px 12px 13px 16px;
+  overflow: hidden;
   background: var(--surface);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent);
   border-radius: var(--radius);
   box-shadow: 0 8px 30px rgba(0,0,0,0.35);
   font-size: var(--fs-base);
 }
-.undo-toast .btn { padding: 5px 12px; }
+.undo-toast .btn { padding: 5px 14px; font-weight: 600; }
 .undo-toast .btn-close { font-size: var(--fs-lg); }
+
+/* Slides up into view, and a thin yellow line along the bottom shrinks over the 10 seconds
+   the Undo is available. Hovering over the message holds both. */
+.undo-toast-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+  animation: undo-countdown 10s linear forwards;
+}
+.undo-toast-in { animation: undo-slide-up 0.25s ease-out; }
+.undo-toast-paused .undo-toast-bar { animation-play-state: paused; }
+@keyframes undo-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes undo-slide-up {
+  from { opacity: 0; transform: translate(-50%, 18px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .undo-toast-in { animation: none; }
+}
