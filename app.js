@@ -945,14 +945,12 @@ function formatAvgPrice(dec) {
 }
 
 // The small line under a selection's bet count. Bets entered with a manual total price have no
-// individual selection price, so say so (or how many bets the figures are based on) rather than
-// silently leaving the line out or averaging only some of the bets.
+// individual selection price, so say so rather than silently leaving the line out. Bets without
+// a price are left out of the average and biggest price.
 function hedgePriceLine(r) {
   if (!r.priced) return 'No individual prices entered';
   const biggest = r.maxPrice.includes('/') ? r.maxPrice : formatAvgPrice(r.maxDecimal);
-  let line = `Average price ${formatAvgPrice(r.avgDecimal)} · Biggest price ${escapeHtml(biggest)}`;
-  if (r.priced < r.bets) line += ` · from ${r.priced} of ${r.bets} bets`;
-  return line;
+  return `Average price ${formatAvgPrice(r.avgDecimal)} · Biggest price ${escapeHtml(biggest)}`;
 }
 
 function renderHedgingMarketList() {
