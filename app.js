@@ -705,11 +705,22 @@ function getTopOpenSelections(limit) {
     (b.selections || []).forEach(s => {
       if (s.void || !s.selection) return;
       const key = `${s.selection}|||${s.market}|||${s.competition}`;
-      if (!counts[key]) counts[key] = { selection: s.selection, market: s.market, competition: s.competition, count: 0 };
-      counts[key].count++;
+      if (!counts[key]) counts[key] = { selection: s.selection, market: s.market, competition: s.competition, count: 0, priceSum: 0, priced: 0 };
+      const row = counts[key];
+      row.count++;
+      // Bets entered with a manual total price have no per-selection price — leave those out.
+      const dec = parseOddsToDecimal(s.price);
+      if (!isNaN(dec) && dec > 1) {
+        row.priceSum += dec;
+        row.priced++;
+        if (!row.maxDecimal || dec > row.maxDecimal) { row.maxDecimal = dec; row.maxPrice = String(s.price).trim(); }
+      }
     });
   });
-  return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, limit);
+  return Object.values(counts)
+    .map(r => ({ ...r, avgDecimal: r.priced ? r.priceSum / r.priced : null }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
 }
 
 function getOpenBetsForSelection(selection, market, competition) {
@@ -733,6 +744,7 @@ function renderTopSelectionsRanking() {
       <div class="top-selection-info">
         <b>${escapeHtml(item.selection)}</b>
         <span class="chip-market">${escapeHtml(item.market)}${item.competition ? ' · ' + escapeHtml(item.competition) : ''}</span>
+        <small class="top-selection-price">${hedgePriceLine(item)}</small>
       </div>
       <span class="top-selection-count">${item.count} bet${item.count === 1 ? '' : 's'}</span>
     </div>
