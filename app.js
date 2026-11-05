@@ -905,7 +905,12 @@ function getHedgingBreakdown(competition, market) {
       bySelection[s.selection].stake += stakeCost(b);
       // Bets entered with a manual total price have no per-selection price — leave those out.
       const dec = parseOddsToDecimal(s.price);
-      if (!isNaN(dec) && dec > 1) { bySelection[s.selection].priceSum += dec; bySelection[s.selection].priced++; }
+      if (!isNaN(dec) && dec > 1) {
+        const row = bySelection[s.selection];
+        row.priceSum += dec;
+        row.priced++;
+        if (!row.maxDecimal || dec > row.maxDecimal) { row.maxDecimal = dec; row.maxPrice = String(s.price).trim(); }
+      }
     });
   });
   return Object.values(bySelection).map(r => ({ ...r, avgDecimal: r.priced ? r.priceSum / r.priced : null }))
@@ -1033,7 +1038,7 @@ function renderHedgingMarket(competition, market, selected) {
         <div class="hedge-row ${r === current ? 'selected' : ''} ${r.isOther ? '' : 'hedge-row-clickable'}" data-selection="${escapeHtml(r.selection)}" ${r.isOther ? '' : 'role="button" tabindex="0"'}>
           <span class="hedge-dot" style="background:${r.color}"></span>
           <span class="hedge-name">${escapeHtml(r.selection)}</span>
-          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%${r.avgDecimal ? `<small class="hedge-avg">Average price ${formatAvgPrice(r.avgDecimal)}</small>` : ''}</span>
+          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%${r.avgDecimal ? `<small class="hedge-avg">Average price ${formatAvgPrice(r.avgDecimal)} · Biggest price ${escapeHtml(r.maxPrice.includes('/') ? r.maxPrice : formatAvgPrice(r.maxDecimal))}</small>` : ''}</span>
           <span class="hedge-stake"><b>${moneyWithCommas(r.stake)}</b><small>staked</small></span>
         </div>
       `).join('')}
