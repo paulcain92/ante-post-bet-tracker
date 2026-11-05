@@ -915,9 +915,19 @@ function getHedgingBreakdown(competition, market) {
 // Average price as a fraction, e.g. "17/2", rounded to the nearest half so it stays readable.
 function formatAvgPrice(dec) {
   if (dec === null || dec === undefined || !isFinite(dec)) return '';
-  const v = Math.round((dec - 1) * 2) / 2;
-  const frac = Number.isInteger(v) ? `${v}/1` : `${v * 2}/2`;
-  return frac;
+  const f = dec - 1;
+  if (f >= 2) {
+    const v = Math.round(f * 2) / 2;
+    return Number.isInteger(v) ? `${v}/1` : `${v * 2}/2`;
+  }
+  // Short prices (e.g. 1/5, 2/7) would round to a meaningless 0/1 above, so find the simplest
+  // genuine fraction that is close to the average instead.
+  const tolerance = Math.max(0.01, f * 0.03);
+  for (let d = 1; d <= 100; d++) {
+    const n = Math.max(1, Math.round(f * d));
+    if (Math.abs(n / d - f) <= tolerance) return `${n}/${d}`;
+  }
+  return '1/100';
 }
 
 function renderHedgingMarketList() {
