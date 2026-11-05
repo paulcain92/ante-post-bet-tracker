@@ -2410,52 +2410,6 @@ function exportBackup() {
   renderBackupReminder();
 }
 
-// A spreadsheet-friendly export — one row per bet, every bet (not just the filtered ones).
-// Unlike the backup file it can't be imported back; it's for analysing in Excel or Sheets.
-function csvCell(value) {
-  let text = value === null || value === undefined ? '' : String(value);
-  // A cell starting with = + - @ would be run as a formula by a spreadsheet, so mark it as text.
-  if (/^[=+\-@]/.test(text) && isNaN(Number(text))) text = "'" + text;
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-function plainOdds(bet) {
-  if (bet.totalOddsRaw) return bet.totalOddsRaw;
-  const frac = decimalToFraction(bet.totalOdds);
-  return frac ?? (bet.totalOdds ?? '');
-}
-
-function exportCsv() {
-  const header = ['Date placed', 'Bookmaker', 'Status', 'Bet type', 'Free bet', 'Acca boost %', 'Win stake', 'Each-way stake',
-    'Stake (own money)', 'Total odds', 'Potential return', 'Return', 'Profit / loss', 'Selections', 'Selection details'];
-  const rows = [...bets]
-    .sort((a, b) => String(a.datePlaced).localeCompare(String(b.datePlaced)))
-    .map(b => {
-      const settled = b.status !== 'open';
-      const ret = b.actualReturn !== null && b.actualReturn !== undefined && b.actualReturn !== '' ? Number(b.actualReturn) : 0;
-      const details = (b.selections || []).map(s => {
-        const result = s.void ? 'void' : (s.result && s.result !== 'pending' ? s.result : 'open');
-        return `${s.selection} — ${s.market}${s.competition ? ' · ' + s.competition : ''}${s.price ? ' @ ' + s.price : ''} [${result}]`;
-      }).join(' | ');
-      return [
-        b.datePlaced, b.bookmaker, b.status, b.betType === 'each-way' ? 'Each way' : 'Win only', b.freeBet ? 'Yes' : 'No',
-        b.boostPercent || '', b.winStake ?? '', b.betType === 'each-way' ? (b.eachWayStake ?? '') : '',
-        stakeCost(b).toFixed(2), plainOdds(b), b.potentialReturn ?? '', settled ? ret.toFixed(2) : '',
-        settled ? (ret - stakeCost(b)).toFixed(2) : '', (b.selections || []).length, details,
-      ];
-    });
-  const csv = [header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
-  // The leading byte-order mark makes Excel read £ and other symbols correctly.
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `acca-tracker-bets-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-document.getElementById('btn-export-csv').addEventListener('click', exportCsv);
 document.getElementById('btn-export').addEventListener('click', exportBackup);
 document.getElementById('btn-banner-export').addEventListener('click', exportBackup);
 document.getElementById('btn-banner-snooze').addEventListener('click', () => {
