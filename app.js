@@ -1204,13 +1204,15 @@ function openSettlePopover(bet, anchor) {
   pop.querySelectorAll('.settle-options button').forEach(btn => {
     btn.addEventListener('click', () => {
       outcome = btn.dataset.outcome;
+      // Lost needs no amount, so there's nothing to confirm: choosing it settles the bet.
+      if (outcome === 'lost') {
+        closeSettlePopover();
+        settleBet(bet, 'lost', null);
+        return;
+      }
       pop.querySelectorAll('.settle-options button').forEach(b => b.classList.toggle('active', b === btn));
       errorEl.hidden = true;
       confirmBtn.disabled = false;
-      if (outcome === 'lost') {
-        amountWrap.hidden = true;
-        return;
-      }
       amountWrap.hidden = false;
       pop.querySelector('.settle-amount-label').textContent = outcome === 'won' ? 'Return' : 'Cash-out amount';
       // A win is pre-filled with the potential return (change it for a part-win such as an
@@ -1247,7 +1249,7 @@ document.addEventListener('mousedown', (e) => {
   if (settlePopover && !e.target.closest('.settle-popover') && !e.target.closest('.btn-settle')) closeSettlePopover();
 });
 
-// The page controls appear both above and below the list. They're shown whenever there are more
+// The page controls sit below the list. They're shown whenever there are more
 // bets than the smallest page size, so the "per page" choice can always be changed back.
 function renderPagination(totalBets, totalPages) {
   const show = totalBets > PAGE_SIZE_OPTIONS[0];
@@ -1266,17 +1268,15 @@ function renderPagination(totalBets, totalPages) {
       </select>
     </label>
   `;
-  ['pagination-top', 'pagination'].forEach(id => {
-    const el = document.getElementById(id);
-    el.hidden = !show;
-    if (show) el.innerHTML = html;
-  });
+  const el = document.getElementById('pagination');
+  el.hidden = !show;
+  if (show) el.innerHTML = html;
 }
 
 // After changing page, jump back to the top of the list so the next page is read from its
 // first bet rather than wherever the Next button happened to be on screen.
 function scrollToListTop() {
-  document.getElementById('pagination-top').scrollIntoView({ block: 'start' });
+  document.getElementById('bets-list').scrollIntoView({ block: 'start' });
 }
 
 function goToPage(page) {
@@ -1285,15 +1285,15 @@ function goToPage(page) {
   scrollToListTop();
 }
 
-['pagination-top', 'pagination'].forEach(id => {
-  const el = document.getElementById(id);
-  el.addEventListener('click', (e) => {
+{
+  const paginationEl = document.getElementById('pagination');
+  paginationEl.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-page-action]');
     if (!btn || btn.disabled) return;
     const action = btn.dataset.pageAction;
     goToPage(action === 'first' ? 1 : action === 'prev' ? currentPage - 1 : action === 'next' ? currentPage + 1 : Infinity);
   });
-  el.addEventListener('change', (e) => {
+  paginationEl.addEventListener('change', (e) => {
     if (e.target.matches('.page-jump')) {
       const n = Math.floor(Number(e.target.value));
       goToPage(isFinite(n) && n >= 1 ? n : currentPage);
@@ -1302,10 +1302,10 @@ function goToPage(page) {
       goToPage(1);
     }
   });
-  el.addEventListener('keydown', (e) => {
+  paginationEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.matches('.page-jump')) { e.preventDefault(); e.target.blur(); }
   });
-});
+}
 
 function renderBetsList() {
   const fullList = getFilteredSortedBets();
@@ -1362,8 +1362,7 @@ function renderBetsList() {
           <div class="bet-actions">
             <button class="btn-edit" title="Edit">✏️</button>
             <button class="btn-duplicate" title="Duplicate">📋</button>
-            ${bet.status === 'open' ? '<button class="btn-settle" title="Settle bet (won / cash out / lost)">💷</button>' : ''}
-            ${bet.status === 'open' ? '<button class="btn-mark-lost" title="Mark as lost">×</button>' : ''}
+            ${bet.status === 'open' ? '<button class="btn-settle" title="Settle bet (won / cash out / lost)">Settle</button>' : ''}
             <button class="btn-delete" title="Delete">🗑️</button>
           </div>
         </div>
@@ -1433,20 +1432,6 @@ function renderBetsList() {
       const id = e.target.closest('.bet-card').dataset.id;
       const targetBet = bets.find(b => b.id === id);
       if (targetBet) openSettlePopover(targetBet, btn);
-    });
-  });
-
-  container.querySelectorAll('.btn-mark-lost').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const id = e.target.closest('.bet-card').dataset.id;
-      const targetBet = bets.find(b => b.id === id);
-      if (!targetBet) return;
-      targetBet.status = 'lost';
-      if (targetBet.actualReturn === null || targetBet.actualReturn === undefined) {
-        targetBet.actualReturn = 0;
-      }
-      saveBets();
-      render();
     });
   });
 

@@ -215,13 +215,14 @@ body {
 /* Half-screen / laptop widths: keep date, figures and the action buttons on a single line by
    tightening the gaps rather than letting the buttons drop underneath. */
 @media (min-width: 700px) and (max-width: 1499px) {
-  .bet-card-top { flex-wrap: nowrap; gap: 10px; }
-  .bet-meta { gap: 6px 10px; flex: 0 1 auto; min-width: 0; }
+  .bet-card-top { flex-wrap: nowrap; gap: 8px; }
+  .bet-meta { gap: 6px 8px; flex: 0 1 auto; min-width: 0; }
   .bet-meta > * { white-space: nowrap; }
-  .bet-figures { flex-wrap: nowrap; gap: 8px; font-size: 12px; }
+  .bet-figures { flex-wrap: nowrap; gap: 6px; font-size: 12px; }
   .bet-figures .if-placed { padding: 2px 8px; }
   .bet-actions { gap: 0; flex-shrink: 0; }
-  .bet-actions button { padding: 4px 4px; }
+  .bet-actions button { padding: 4px 2px; font-size: 14px; }
+  .bet-actions button.btn-settle { padding: 2px 8px; margin: 0 2px; }
 }
 
 /* On wide screens every card lays its figures out on the same fixed columns, so
@@ -294,8 +295,16 @@ body {
   padding: 4px 6px;
 }
 .bet-actions button:hover { color: var(--accent-text); }
-.bet-actions button.btn-mark-lost { color: var(--red); font-size: 18px; font-weight: 600; }
-.bet-actions button.btn-mark-lost:hover { color: var(--red); opacity: 0.7; }
+.bet-actions button.btn-settle {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  margin: 0 3px;
+}
+.bet-actions button.btn-settle:hover { border-color: var(--accent); color: var(--accent-text); }
 
 .selections-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
 .chip {
@@ -353,7 +362,7 @@ body {
   gap: 10px 16px;
   margin-top: 18px;
 }
-.pagination-top { margin: 0 0 12px; }
+#bets-list { scroll-margin-top: 12px; }
 .pagination button:disabled { opacity: 0.4; cursor: default; }
 .pagination-info { font-size: 13px; color: var(--text-muted); }
 .pagination-extra { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
