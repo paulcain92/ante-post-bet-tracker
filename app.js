@@ -900,12 +900,25 @@ function getHedgingBreakdown(competition, market) {
       if (!isUndecidedSelection(s) || (s.competition || '') !== competition || (s.market || '') !== market) return;
       if (counted.has(s.selection)) return;
       counted.add(s.selection);
-      if (!bySelection[s.selection]) bySelection[s.selection] = { selection: s.selection, bets: 0, stake: 0 };
+      if (!bySelection[s.selection]) bySelection[s.selection] = { selection: s.selection, bets: 0, stake: 0, priceSum: 0, priced: 0 };
       bySelection[s.selection].bets++;
       bySelection[s.selection].stake += stakeCost(b);
+      // Bets entered with a manual total price have no per-selection price — leave those out.
+      const dec = parseOddsToDecimal(s.price);
+      if (!isNaN(dec) && dec > 1) { bySelection[s.selection].priceSum += dec; bySelection[s.selection].priced++; }
     });
   });
-  return Object.values(bySelection).sort((a, b) => b.bets - a.bets || b.stake - a.stake);
+  return Object.values(bySelection).map(r => ({ ...r, avgDecimal: r.priced ? r.priceSum / r.priced : null }))
+    .sort((a, b) => b.bets - a.bets || b.stake - a.stake);
+}
+
+// Average price label, e.g. "9.50 (≈17/2)". The fraction is rounded to the nearest half so it
+// stays readable — the decimal is the exact figure.
+function formatAvgPrice(dec) {
+  if (dec === null || dec === undefined || !isFinite(dec)) return '';
+  const v = Math.round((dec - 1) * 2) / 2;
+  const frac = Number.isInteger(v) ? `${v}/1` : `${v * 2}/2`;
+  return `${dec.toFixed(2)} (≈${frac})`;
 }
 
 function renderHedgingMarketList() {
@@ -1011,7 +1024,7 @@ function renderHedgingMarket(competition, market, selected) {
         <div class="hedge-row ${r === current ? 'selected' : ''} ${r.isOther ? '' : 'hedge-row-clickable'}" data-selection="${escapeHtml(r.selection)}" ${r.isOther ? '' : 'role="button" tabindex="0"'}>
           <span class="hedge-dot" style="background:${r.color}"></span>
           <span class="hedge-name">${escapeHtml(r.selection)}</span>
-          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%</span>
+          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%${r.avgDecimal ? `<small class="hedge-avg">Avg price ${formatAvgPrice(r.avgDecimal)}</small>` : ''}</span>
           <span class="hedge-stake"><b>${moneyWithCommas(r.stake)}</b><small>staked</small></span>
         </div>
       `).join('')}

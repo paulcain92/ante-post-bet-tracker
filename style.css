@@ -182,6 +182,7 @@ body {
 .bet-meta .date { font-weight: 600; }
 .bet-meta .bookmaker { color: var(--text-muted); }
 .bet-figures { display: flex; gap: 16px; font-size: 13px; color: var(--text-muted); flex-wrap: wrap; }
+.bet-figures > span { white-space: nowrap; }
 .bet-figures b { color: var(--text); font-weight: 600; }
 .bet-badges { display: inline-flex; align-items: center; gap: 6px; }
 .bet-badges > span { margin-left: 0; }
@@ -203,7 +204,7 @@ body {
   .bet-card-top { display: grid; grid-template-columns: 520px 1fr 120px; column-gap: 14px; }
   .bet-figures {
     display: grid;
-    grid-template-columns: 110px 90px 140px 130px 120px;
+    grid-template-columns: 110px 130px 140px 130px 120px;
     gap: 0 12px;
     justify-self: center;
   }
@@ -458,7 +459,8 @@ summary.hedge-competition-head:hover { color: var(--accent); }
 .hedge-row.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .hedge-dot { flex-shrink: 0; width: 11px; height: 11px; border-radius: 50%; }
 .hedge-name { flex: 1; min-width: 0; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; overflow: hidden; text-overflow: ellipsis; }
-.hedge-count { flex-shrink: 0; font-size: 12.5px; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+.hedge-count { flex-shrink: 0; font-size: 12.5px; font-weight: 600; color: var(--text-muted); white-space: nowrap; display: flex; flex-direction: column; align-items: flex-end; }
+.hedge-count .hedge-avg { font-size: 11px; font-weight: 500; margin-top: 2px; }
 .hedge-stake { flex-shrink: 0; min-width: 96px; text-align: right; display: flex; flex-direction: column; }
 .hedge-stake b { font-size: 16px; color: var(--accent-text); }
 .hedge-stake small { font-size: 11px; color: var(--text-muted); }
