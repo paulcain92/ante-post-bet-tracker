@@ -912,13 +912,12 @@ function getHedgingBreakdown(competition, market) {
     .sort((a, b) => b.bets - a.bets || b.stake - a.stake);
 }
 
-// Average price label, e.g. "9.50 (≈17/2)". The fraction is rounded to the nearest half so it
-// stays readable — the decimal is the exact figure.
+// Average price as a fraction, e.g. "17/2", rounded to the nearest half so it stays readable.
 function formatAvgPrice(dec) {
   if (dec === null || dec === undefined || !isFinite(dec)) return '';
   const v = Math.round((dec - 1) * 2) / 2;
   const frac = Number.isInteger(v) ? `${v}/1` : `${v * 2}/2`;
-  return `${dec.toFixed(2)} (≈${frac})`;
+  return frac;
 }
 
 function renderHedgingMarketList() {
@@ -1024,7 +1023,7 @@ function renderHedgingMarket(competition, market, selected) {
         <div class="hedge-row ${r === current ? 'selected' : ''} ${r.isOther ? '' : 'hedge-row-clickable'}" data-selection="${escapeHtml(r.selection)}" ${r.isOther ? '' : 'role="button" tabindex="0"'}>
           <span class="hedge-dot" style="background:${r.color}"></span>
           <span class="hedge-name">${escapeHtml(r.selection)}</span>
-          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%${r.avgDecimal ? `<small class="hedge-avg">Avg price ${formatAvgPrice(r.avgDecimal)}</small>` : ''}</span>
+          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%${r.avgDecimal ? `<small class="hedge-avg">Average price ${formatAvgPrice(r.avgDecimal)}</small>` : ''}</span>
           <span class="hedge-stake"><b>${moneyWithCommas(r.stake)}</b><small>staked</small></span>
         </div>
       `).join('')}
