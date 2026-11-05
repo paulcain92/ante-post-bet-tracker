@@ -11,12 +11,17 @@
   --on-accent: #1e3a8a;
   --blue: #2563eb;
   --red: #dc2626;
-  --orange: #d97706;
+  --orange: #b45309;
   --gray: #6b7280;
   --win-green: #16a34a;
   --on-win-green: #ffffff;
-  --place-green: #fac775;
-  --on-place-green: #633806;
+  --place-amber: #fac775;
+  --on-place-amber: #633806;
+  --purple: #7c3aed;
+  --on-blue: #ffffff;
+  --on-red: #ffffff;
+  --on-orange: #ffffff;
+  --on-purple: #ffffff;
   --radius: 10px;
   --shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
@@ -39,8 +44,13 @@
     --gray: #97a39c;
     --win-green: #22c55e;
     --on-win-green: #052e16;
-    --place-green: #854f0b;
-    --on-place-green: #fac775;
+    --place-amber: #854f0b;
+    --on-place-amber: #fac775;
+    --purple: #a78bfa;
+    --on-blue: #0b1b3d;
+    --on-red: #3b0a0a;
+    --on-orange: #3b2200;
+    --on-purple: #1e1b4b;
     --shadow: 0 1px 3px rgba(0,0,0,0.4);
   }
 }
@@ -48,6 +58,10 @@
 * { box-sizing: border-box; }
 
 [hidden] { display: none !important; }
+
+/* Form controls don't inherit the page font by default, so without this the inputs, dropdowns
+   and buttons render in the browser's own font instead of the one used everywhere else. */
+button, input, select, textarea { font-family: inherit; }
 
 body {
   margin: 0;
@@ -88,7 +102,7 @@ body {
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-ghost { background: transparent; }
 .btn-danger { background: transparent; color: var(--red); border-color: var(--red); }
-.btn-danger:hover { background: var(--red); color: #fff; }
+.btn-danger:hover { background: var(--red); color: var(--on-red); }
 .btn-close {
   background: none; border: none; font-size: 24px; line-height: 1; cursor: pointer;
   color: var(--text-muted);
@@ -187,8 +201,8 @@ body {
 .bet-badges { display: inline-flex; align-items: center; gap: 6px; }
 .bet-badges > span { margin-left: 0; }
 .bet-figures .if-placed {
-  background: var(--place-green);
-  color: var(--on-place-green);
+  background: var(--place-amber);
+  color: var(--on-place-amber);
   border-radius: 999px;
   padding: 2px 10px;
   justify-self: start;
@@ -230,12 +244,12 @@ body {
   font-size: 12px;
   font-weight: 600;
   text-transform: capitalize;
-  color: #fff;
+  color: var(--on-blue);
 }
-.status-open { background: var(--blue); }
+.status-open { background: var(--blue); color: var(--on-blue); }
 .status-won { background: var(--win-green); color: var(--on-win-green); }
-.status-lost { background: var(--red); }
-.status-cash-out { background: var(--orange); }
+.status-lost { background: var(--red); color: var(--on-red); }
+.status-cash-out { background: var(--orange); color: var(--on-orange); }
 
 .ew-badge {
   display: inline-block;
@@ -243,8 +257,8 @@ body {
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
-  background: var(--place-green);
-  color: var(--on-place-green);
+  background: var(--place-amber);
+  color: var(--on-place-amber);
   margin-left: 6px;
   vertical-align: 1px;
 }
@@ -267,8 +281,8 @@ body {
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
-  background: var(--blue);
-  color: #ffffff;
+  background: var(--purple);
+  color: var(--on-purple);
   margin-left: 6px;
   vertical-align: 1px;
 }
@@ -295,10 +309,10 @@ body {
 
 .chip.chip-won { background: var(--win-green); color: var(--on-win-green); border-color: var(--win-green); }
 .chip.chip-won .chip-market { color: var(--on-win-green); opacity: 0.8; }
-.chip.chip-placed { background: var(--place-green); color: var(--on-place-green); border-color: var(--place-green); }
-.chip.chip-placed .chip-market { color: var(--on-place-green); opacity: 0.8; }
-.chip.chip-lost { background: var(--red); color: #fff; border-color: var(--red); }
-.chip.chip-lost .chip-market { color: #fff; opacity: 0.8; }
+.chip.chip-placed { background: var(--place-amber); color: var(--on-place-amber); border-color: var(--place-amber); }
+.chip.chip-placed .chip-market { color: var(--on-place-amber); opacity: 0.8; }
+.chip.chip-lost { background: var(--red); color: var(--on-red); border-color: var(--red); }
+.chip.chip-lost .chip-market { color: var(--on-red); opacity: 0.8; }
 .chip.chip-void { opacity: 0.55; text-decoration: line-through; cursor: default; }
 .chip.chip-void:hover { border-color: var(--border); color: var(--text); }
 
