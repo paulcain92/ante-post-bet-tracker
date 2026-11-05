@@ -944,6 +944,17 @@ function formatAvgPrice(dec) {
   return best.label;
 }
 
+// The small line under a selection's bet count. Bets entered with a manual total price have no
+// individual selection price, so say so (or how many bets the figures are based on) rather than
+// silently leaving the line out or averaging only some of the bets.
+function hedgePriceLine(r) {
+  if (!r.priced) return 'No individual prices entered';
+  const biggest = r.maxPrice.includes('/') ? r.maxPrice : formatAvgPrice(r.maxDecimal);
+  let line = `Average price ${formatAvgPrice(r.avgDecimal)} · Biggest price ${escapeHtml(biggest)}`;
+  if (r.priced < r.bets) line += ` · from ${r.priced} of ${r.bets} bets`;
+  return line;
+}
+
 function renderHedgingMarketList() {
   document.getElementById('btn-hedging-back').hidden = true;
   document.getElementById('hedging-title').textContent = 'Hedging';
@@ -1047,7 +1058,7 @@ function renderHedgingMarket(competition, market, selected) {
         <div class="hedge-row ${r === current ? 'selected' : ''} ${r.isOther ? '' : 'hedge-row-clickable'}" data-selection="${escapeHtml(r.selection)}" ${r.isOther ? '' : 'role="button" tabindex="0"'}>
           <span class="hedge-dot" style="background:${r.color}"></span>
           <span class="hedge-name">${escapeHtml(r.selection)}</span>
-          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%${r.avgDecimal ? `<small class="hedge-avg">Average price ${formatAvgPrice(r.avgDecimal)} · Biggest price ${escapeHtml(r.maxPrice.includes('/') ? r.maxPrice : formatAvgPrice(r.maxDecimal))}</small>` : ''}</span>
+          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%${r.isOther ? '' : `<small class="hedge-avg">${hedgePriceLine(r)}</small>`}</span>
           <span class="hedge-stake"><b>${moneyWithCommas(r.stake)}</b><small>staked</small></span>
         </div>
       `).join('')}
