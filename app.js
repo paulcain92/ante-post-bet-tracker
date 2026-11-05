@@ -917,22 +917,31 @@ function getHedgingBreakdown(competition, market) {
     .sort((a, b) => b.bets - a.bets || b.stake - a.stake);
 }
 
-// Average price as a fraction, e.g. "17/2", rounded to the nearest half so it stays readable.
+// Prices a bookmaker would actually offer, as fractions. An average is snapped to the nearest
+// of these so it never shows something that isn't a real price (e.g. 17/16).
+const COMMON_FRACTIONAL_PRICES = [
+  '1/100', '1/50', '1/33', '1/25', '1/20', '1/16', '1/14', '1/12', '1/10', '1/9', '1/8', '2/15',
+  '1/7', '2/13', '1/6', '2/11', '1/5', '2/9', '1/4', '2/7', '3/10', '1/3', '4/11', '8/25', '3/8',
+  '2/5', '4/9', '5/11', '1/2', '8/15', '4/7', '8/13', '3/5', '5/8', '4/6', '8/11', '4/5', '5/6',
+  '10/11', '20/21', '1/1', '11/10', '6/5', '5/4', '11/8', '6/4', '13/8', '7/4', '15/8',
+  '2/1', '9/4', '5/2', '11/4', '3/1', '10/3', '7/2', '4/1', '9/2', '5/1', '11/2', '6/1', '13/2',
+  '7/1', '15/2', '8/1', '17/2', '9/1', '19/2', '10/1', '11/1', '12/1', '14/1', '16/1', '18/1',
+  '20/1', '22/1', '25/1', '28/1', '33/1', '40/1', '50/1', '66/1', '80/1', '100/1',
+].map(label => {
+  const [n, d] = label.split('/').map(Number);
+  return { label, value: n / d };
+});
+
+// Average price as the nearest common fractional price, e.g. "17/2".
 function formatAvgPrice(dec) {
   if (dec === null || dec === undefined || !isFinite(dec)) return '';
   const f = dec - 1;
-  if (f >= 2) {
-    const v = Math.round(f * 2) / 2;
-    return Number.isInteger(v) ? `${v}/1` : `${v * 2}/2`;
+  if (f > 100) return `${Math.round(f / 50) * 50}/1`;
+  let best = COMMON_FRACTIONAL_PRICES[0];
+  for (const p of COMMON_FRACTIONAL_PRICES) {
+    if (Math.abs(p.value - f) < Math.abs(best.value - f)) best = p;
   }
-  // Short prices (e.g. 1/5, 2/7) would round to a meaningless 0/1 above, so find the simplest
-  // genuine fraction that is close to the average instead.
-  const tolerance = Math.max(0.01, f * 0.03);
-  for (let d = 1; d <= 100; d++) {
-    const n = Math.max(1, Math.round(f * d));
-    if (Math.abs(n / d - f) <= tolerance) return `${n}/${d}`;
-  }
-  return '1/100';
+  return best.label;
 }
 
 function renderHedgingMarketList() {
