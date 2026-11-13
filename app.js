@@ -1398,9 +1398,10 @@ function renderBetsList() {
 
   container.innerHTML = list.map(bet => {
     const stake = totalStake(bet);
-    // Lost bets stay tickable so the other selections can still be marked won, to see how
-    // close the accumulator came.
-    const canTrackResults = bet.status === 'open' || bet.status === 'lost';
+    // Lost and cashed-out bets stay tickable so their selections can still be marked won or
+    // lost, to see how the accumulator would have finished. Ticking never changes their status
+    // or return.
+    const canTrackResults = bet.status === 'open' || bet.status === 'lost' || bet.status === 'cash-out';
     const chips = bet.selections.map((s, selIndex) => {
       const result = s.result || 'pending';
       const resultClass = s.void ? 'chip-void' : result === 'won' ? 'chip-won' : result === 'placed' ? 'chip-placed' : result === 'lost' ? 'chip-lost' : '';
