@@ -653,10 +653,21 @@ function renderLineChart(container, series) {
     svg += `<circle cx="${x}" cy="${y}" r="3.5" fill="var(--accent)" pointer-events="none">${tooltip}</circle>`;
   });
 
+  // A date label roughly every tenth point, plus always the latest one. The latest label can land
+  // just a few points after the previous one and print on top of it, so when they'd be closer
+  // than a label is wide the earlier one is dropped and the latest date wins.
   const labelStep = Math.max(1, Math.ceil(n / 10));
-  series.forEach((p, i) => {
-    if (i % labelStep !== 0 && i !== n - 1) return;
-    svg += `<text x="${xScale(i).toFixed(1)}" y="${height - marginBottom + 18}" class="chart-axis-label" text-anchor="middle">${escapeHtml(p.label)}</text>`;
+  const labelIndexes = [];
+  for (let i = 0; i < n; i += labelStep) labelIndexes.push(i);
+  if (labelIndexes[labelIndexes.length - 1] !== n - 1) {
+    const pointGap = n === 1 ? plotWidth : plotWidth / (n - 1);
+    const minLabelGap = 56; // widest label ("13 Nov") plus breathing room, in chart units
+    const previous = labelIndexes[labelIndexes.length - 1];
+    if ((n - 1 - previous) * pointGap < minLabelGap) labelIndexes.pop();
+    labelIndexes.push(n - 1);
+  }
+  labelIndexes.forEach(i => {
+    svg += `<text x="${xScale(i).toFixed(1)}" y="${height - marginBottom + 18}" class="chart-axis-label" text-anchor="middle">${escapeHtml(series[i].label)}</text>`;
   });
 
   svg += `</svg>`;
