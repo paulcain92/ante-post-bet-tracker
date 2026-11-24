@@ -653,18 +653,21 @@ function renderLineChart(container, series) {
     svg += `<circle cx="${x}" cy="${y}" r="3.5" fill="var(--accent)" pointer-events="none">${tooltip}</circle>`;
   });
 
-  // A date label roughly every tenth point, plus always the latest one. The latest label can land
-  // just a few points after the previous one and print on top of it, so when they'd be closer
-  // than a label is wide the earlier one is dropped and the latest date wins.
-  const labelStep = Math.max(1, Math.ceil(n / 10));
+  // Up to ten date labels spread evenly from the first point to the latest one, so the gaps
+  // between them are all the same and the first and latest dates are always shown. (Spacing
+  // them in steps from the start left a short or oversized gap before the last label.)
+  // Where the number of gaps divides exactly (e.g. 84 gaps into 7 labels' worth of 12) that
+  // count is used so the spacing is perfectly equal; otherwise ten labels, rounded to the
+  // nearest point.
+  let labelCount = Math.min(n, 10);
+  if (n > 10) {
+    for (let candidate = 10; candidate >= 6; candidate--) {
+      if ((n - 1) % (candidate - 1) === 0) { labelCount = candidate; break; }
+    }
+  }
   const labelIndexes = [];
-  for (let i = 0; i < n; i += labelStep) labelIndexes.push(i);
-  if (labelIndexes[labelIndexes.length - 1] !== n - 1) {
-    const pointGap = n === 1 ? plotWidth : plotWidth / (n - 1);
-    const minLabelGap = 56; // widest label ("13 Nov") plus breathing room, in chart units
-    const previous = labelIndexes[labelIndexes.length - 1];
-    if ((n - 1 - previous) * pointGap < minLabelGap) labelIndexes.pop();
-    labelIndexes.push(n - 1);
+  for (let j = 0; j < labelCount; j++) {
+    labelIndexes.push(labelCount === 1 ? 0 : Math.round(j * (n - 1) / (labelCount - 1)));
   }
   labelIndexes.forEach(i => {
     svg += `<text x="${xScale(i).toFixed(1)}" y="${height - marginBottom + 18}" class="chart-axis-label" text-anchor="middle">${escapeHtml(series[i].label)}</text>`;
