@@ -513,8 +513,14 @@ summary.hedge-competition-head:hover { color: var(--accent); }
   border: 1px solid var(--border);
   border-radius: 10px;
 }
-.hedge-row-clickable { cursor: pointer; }
-.hedge-row-clickable:hover { border-color: var(--accent); }
+.hedge-row-clickable,
+.hedge-row-other { cursor: pointer; }
+.hedge-row-clickable:hover,
+.hedge-row-other:hover { border-color: var(--accent); }
+/* The "Other" row opens a list of the selections grouped inside it, indented beneath. */
+.hedge-chevron { display: inline-block; margin-left: 8px; color: var(--text-muted); transition: transform 0.15s; }
+.hedge-row-other[aria-expanded="true"] .hedge-chevron { transform: rotate(90deg); }
+.hedge-other-list { display: flex; flex-direction: column; gap: 8px; margin-left: 18px; }
 .hedge-row.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .hedge-dot { flex-shrink: 0; width: 11px; height: 11px; border-radius: 50%; }
 .hedge-name { flex: 1; min-width: 0; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; overflow: hidden; text-overflow: ellipsis; }

@@ -1064,10 +1064,21 @@ function renderHedgingMarket(competition, market, selected) {
       isOther: true,
     });
   }
+  // The selections grouped under "Other". Clicking that row lists them underneath, each one
+  // opening its accumulators like any other selection.
+  const others = rows.slice(HEDGE_TOP_N).map(r => ({ ...r, color: 'var(--gray)' }));
   // Only highlighted when coming back from that selection's accumulators, so there's no
-  // misleading "selected" row on first opening.
-  const current = selected ? shown.find(r => !r.isOther && r.selection === selected) : null;
+  // misleading "selected" row on first opening. If it was one of the "Other" selections, that
+  // list is opened again so you land where you were.
+  const otherWasOpen = !!selected && others.some(r => r.selection === selected);
   const pct = (n) => (n / total * 100).toFixed(1);
+  const rowHtml = (r, extraClass = '') => `
+        <div class="hedge-row ${extraClass} ${selected && !r.isOther && r.selection === selected ? 'selected' : ''} ${r.isOther ? 'hedge-row-other' : 'hedge-row-clickable'}" ${r.isOther ? `aria-expanded="${otherWasOpen}"` : `data-selection="${escapeHtml(r.selection)}"`} role="button" tabindex="0">
+          <span class="hedge-dot" style="background:${r.color}"></span>
+          <span class="hedge-name">${escapeHtml(r.selection)}${r.isOther ? '<span class="hedge-chevron" aria-hidden="true">▸</span>' : ''}</span>
+          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%${r.isOther ? '' : `<small class="hedge-avg">${hedgePriceLine(r)}</small>`}</span>
+          <span class="hedge-stake"><b>${moneyWithCommas(r.stake)}</b><small>staked</small></span>
+        </div>`;
 
   body.innerHTML = `
     <div class="hedge-head">
@@ -1079,14 +1090,8 @@ function renderHedgingMarket(competition, market, selected) {
       ${shown.map(r => `<span class="hedge-bar-seg" style="width:${(r.bets / total * 100).toFixed(2)}%;background:${r.color}" title="${escapeHtml(r.selection)}: ${pct(r.bets)}%"></span>`).join('')}
     </div>
     <div class="hedge-rows">
-      ${shown.map(r => `
-        <div class="hedge-row ${r === current ? 'selected' : ''} ${r.isOther ? '' : 'hedge-row-clickable'}" data-selection="${escapeHtml(r.selection)}" ${r.isOther ? '' : 'role="button" tabindex="0"'}>
-          <span class="hedge-dot" style="background:${r.color}"></span>
-          <span class="hedge-name">${escapeHtml(r.selection)}</span>
-          <span class="hedge-count">${r.bets} bet${r.bets === 1 ? '' : 's'} · ${pct(r.bets)}%${r.isOther ? '' : `<small class="hedge-avg">${hedgePriceLine(r)}</small>`}</span>
-          <span class="hedge-stake"><b>${moneyWithCommas(r.stake)}</b><small>staked</small></span>
-        </div>
-      `).join('')}
+      ${shown.map(r => rowHtml(r)).join('')}
+      ${others.length ? `<div class="hedge-other-list" ${otherWasOpen ? '' : 'hidden'}>${others.map(r => rowHtml(r, 'hedge-row-sub')).join('')}</div>` : ''}
     </div>
   `;
 
@@ -1096,6 +1101,17 @@ function renderHedgingMarket(competition, market, selected) {
     row.addEventListener('click', activate);
     row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
   });
+  const otherRow = body.querySelector('.hedge-row-other');
+  if (otherRow) {
+    const otherList = body.querySelector('.hedge-other-list');
+    const toggle = () => {
+      otherList.hidden = !otherList.hidden;
+      otherRow.setAttribute('aria-expanded', String(!otherList.hidden));
+      if (!otherList.hidden) otherList.scrollIntoView({ block: 'nearest' });
+    };
+    otherRow.addEventListener('click', toggle);
+    otherRow.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  }
 }
 
 // The open accumulators behind one selection's row, in the same expandable list Top Selections
